@@ -1,0 +1,233 @@
+-- ============================================================
+-- CleanCalendar — Supabase Schema
+-- Run this in your Supabase SQL editor to initialize the DB.
+-- ============================================================
+
+-- Enable UUID extension
+create extension if not exists "uuid-ossp";
+
+-- ── Profiles (extends auth.users) ────────────────────────────────────────
+create table if not exists profiles (
+  id           uuid primary key references auth.users(id) on delete cascade,
+  email        text not null,
+  full_name    text not null,
+  phone        text,
+  role         text not null default 'worker' check (role in ('admin', 'manager', 'worker')),
+  avatar_url   text,
+  is_active    boolean not null default true,
+  created_at   timestamptz not null default now(),
+  updated_at   timestamptz not null default now()
+);
+
+-- Auto-create profile on signup
+create or replace function handle_new_user()
+returns trigger language plpgsql security definer as $$
+begin
+  insert into profiles (id, email, full_name, role)
+  values (
+    new.id,
+    new.email,
+    coalesce(new.raw_user_meta_data->>'full_name', new.email),
+    coalesce(new.raw_user_meta_data->>'role', 'worker')
+  );
+  return new;
+end;
+$$;
+
+drop trigger if exists on_auth_user_created on auth.users;
+create trigger on_auth_user_created
+  after insert on auth.users
+  for each row execute procedure handle_new_user();
+
+-- ── Customers ─────────────────────────────────────────────────────────────
+create table if not exists customers (
+  id                     uuid primary key default uuid_generate_v4(),
+  full_name              text not null,
+  email                  text,
+  phone                  text not null,
+  address                text,
+  notes                  text,
+  highlevel_contact_id   text unique,
+  created_at             timestamptz not null default now(),
+  updated_at             timestamptz not null default now()
+);
+
+-- ── Cars ──────────────────────────────────────────────────────────────────
+create table if not exists cars (
+  id            uuid primary key default uuid_generate_v4(),
+  customer_id   uuid not null references customers(id) on delete cascade,
+  make          text not null,
+  model         text not null,
+  year          integer,
+  color         text,
+  license_plate text,
+  vin           text,
+  notes         text,
+  created_at    timestamptz not null default now(),
+  updated_at    timestamptz not null default now()
+);
+
+-- ── Bookings ──────────────────────────────────────────────────────────────
+create table if not exists bookings (
+  id                           uuid primary key default uuid_generate_v4(),
+  customer_id                  uuid not null references customers(id),
+  car_id                       uuid not null references cars(id),
+  assigned_worker_id           uuid references profiles(id),
+  status                       text not null default 'pending'
+                                 check (status in ('pending','confirmed','in_progress','completed','cancelled')),
+  scheduled_at                 timestamptz not null,
+  estimated_duration_minutes   integer not null default 60,
+  service_type                 text not null,
+  service_notes                text,
+  customer_notes               text,
+  location_address             text,
+  total_price                  numeric(10,2),
+  highlevel_appointment_id     text unique,
+  highlevel_calendar_id        text,
+  sms_confirmation_sent        boolean not null default false,
+  created_at                   timestamptz not null default now(),
+  updated_at                   timestamptz not null default now()
+);
+
+create index if not exists bookings_scheduled_at_idx on bookings(scheduled_at);
+create index if not exists bookings_status_idx on bookings(status);
+create index if not exists bookings_worker_idx on bookings(assigned_worker_id);
+
+-- ── Cleaning Jobs ─────────────────────────────────────────────────────────
+create table if not exists cleaning_jobs (
+  id            uuid primary key default uuid_generate_v4(),
+  booking_id    uuid not null unique references bookings(id) on delete cascade,
+  worker_id     uuid not null references profiles(id),
+  status        text not null default 'not_started'
+                  check (status in ('not_started','in_progress','completed','needs_review')),
+  started_at    timestamptz,
+  completed_at  timestamptz,
+  worker_notes  text,
+  admin_notes   text,
+  created_at    timestamptz not null default now(),
+  updated_at    timestamptz not null default now()
+);
+
+create index if not exists jobs_status_idx on cleaning_jobs(status);
+create index if not exists jobs_worker_idx on cleaning_jobs(worker_id);
+
+-- ── Job Images ────────────────────────────────────────────────────────────
+create table if not exists job_images (
+  id               uuid primary key default uuid_generate_v4(),
+  job_id           uuid not null references cleaning_jobs(id) on delete cascade,
+  storage_path     text not null,
+  public_url       text not null,
+  type             text not null check (type in ('before','after')),
+  uploaded_by      uuid not null references profiles(id),
+  file_size_bytes  integer,
+  created_at       timestamptz not null default now()
+);
+
+create index if not exists images_job_idx on job_images(job_id);
+
+-- ── SMS Logs ──────────────────────────────────────────────────────────────
+create table if not exists sms_logs (
+  id                    uuid primary key default uuid_generate_v4(),
+  booking_id            uuid references bookings(id),
+  customer_id           uuid not null references customers(id),
+  phone_number          text not null,
+  message_body          text not null,
+  status                text not null default 'pending'
+                          check (status in ('pending','sent','delivered','failed')),
+  highlevel_message_id  text,
+  sent_at               timestamptz,
+  error_message         text,
+  created_at            timestamptz not null default now()
+);
+
+-- ── HighLevel Sync Logs ───────────────────────────────────────────────────
+create table if not exists highlevel_sync_logs (
+  id             uuid primary key default uuid_generate_v4(),
+  entity_type    text not null check (entity_type in ('booking','customer','contact')),
+  entity_id      text not null,
+  highlevel_id   text,
+  action         text not null check (action in ('create','update','delete','webhook_received')),
+  payload        jsonb,
+  success        boolean not null default true,
+  error_message  text,
+  created_at     timestamptz not null default now()
+);
+
+-- ── Row Level Security ────────────────────────────────────────────────────
+alter table profiles           enable row level security;
+alter table customers          enable row level security;
+alter table cars               enable row level security;
+alter table bookings           enable row level security;
+alter table cleaning_jobs      enable row level security;
+alter table job_images         enable row level security;
+alter table sms_logs           enable row level security;
+alter table highlevel_sync_logs enable row level security;
+
+-- Profiles: users see their own, admins/managers see all
+create policy "profiles_select" on profiles for select
+  using (auth.uid() = id or exists (
+    select 1 from profiles p where p.id = auth.uid() and p.role in ('admin','manager')
+  ));
+
+create policy "profiles_update_own" on profiles for update
+  using (auth.uid() = id);
+
+-- Bookings: all authenticated workers can read; only admins/managers can write
+create policy "bookings_select_auth" on bookings for select
+  using (auth.uid() is not null);
+
+create policy "bookings_insert_admin" on bookings for insert
+  with check (exists (
+    select 1 from profiles where id = auth.uid() and role in ('admin','manager')
+  ));
+
+create policy "bookings_update_admin" on bookings for update
+  using (exists (
+    select 1 from profiles where id = auth.uid() and role in ('admin','manager')
+  ));
+
+-- Cleaning jobs: workers can update their own jobs
+create policy "jobs_select_auth" on cleaning_jobs for select
+  using (auth.uid() is not null);
+
+create policy "jobs_update_own" on cleaning_jobs for update
+  using (worker_id = auth.uid() or exists (
+    select 1 from profiles where id = auth.uid() and role in ('admin','manager')
+  ));
+
+-- Job images: authenticated users can insert/read
+create policy "images_select_auth" on job_images for select
+  using (auth.uid() is not null);
+
+create policy "images_insert_auth" on job_images for insert
+  with check (auth.uid() is not null);
+
+-- Customers: all authenticated can read; admins can write
+create policy "customers_select_auth" on customers for select
+  using (auth.uid() is not null);
+
+create policy "customers_write_admin" on customers for all
+  using (exists (
+    select 1 from profiles where id = auth.uid() and role in ('admin','manager')
+  ));
+
+-- Cars: same as customers
+create policy "cars_select_auth" on cars for select
+  using (auth.uid() is not null);
+
+create policy "cars_write_admin" on cars for all
+  using (exists (
+    select 1 from profiles where id = auth.uid() and role in ('admin','manager')
+  ));
+
+-- SMS logs: admins only
+create policy "sms_logs_admin" on sms_logs for all
+  using (exists (
+    select 1 from profiles where id = auth.uid() and role = 'admin'
+  ));
+
+-- Sync logs: admins only
+create policy "sync_logs_admin" on highlevel_sync_logs for all
+  using (exists (
+    select 1 from profiles where id = auth.uid() and role = 'admin'
+  ));
