@@ -1,128 +1,220 @@
 'use client'
 
-import type { Booking } from '@/types'
-import {
-  format,
-  startOfMonth, endOfMonth,
-  eachDayOfInterval,
-  isSameDay,
-  startOfWeek, endOfWeek,
-  isToday as dateFnsIsToday,
-} from 'date-fns'
-import { sv } from 'date-fns/locale'
-import { useState } from 'react'
+import { useState, useMemo } from 'react'
+import type { Booking, BookingStatus, Profile } from '@/types'
+import { ChevronLeft, ChevronRight, CalendarDays } from 'lucide-react'
 import { cn } from '@/lib/utils/cn'
-import { ChevronLeft, ChevronRight } from 'lucide-react'
+import type { CalendarView } from './calendar-utils'
+import {
+  STATUS_CONFIG,
+  MONTHS_SE,
+  addDays,
+  startOfWeek,
+  getWeekNumber,
+  isSameDay,
+} from './calendar-utils'
+import { MonthView } from './month-view'
+import { WeekView } from './week-view'
+import { DayView } from './day-view'
+import { BookingDetailPanel } from './booking-detail-panel'
 
-const STATUS_COLOR: Record<string, string> = {
-  pending:     '#C4962A',
-  confirmed:   '#4A90D9',
-  in_progress: '#8B5CF6',
-  completed:   '#3DAB6A',
-  cancelled:   '#E05252',
+interface Props {
+  bookings: Booking[]
+  workers?: Profile[]
 }
 
-const DAYS_SE = ['Mån', 'Tis', 'Ons', 'Tor', 'Fre', 'Lör', 'Sön']
+const VIEWS: { key: CalendarView; label: string }[] = [
+  { key: 'dag', label: 'Dag' },
+  { key: 'vecka', label: 'Vecka' },
+  { key: 'månad', label: 'Månad' },
+]
 
-export function CalendarView({ bookings }: { bookings: Booking[] }) {
+const ALL_STATUSES = Object.keys(STATUS_CONFIG) as BookingStatus[]
+
+export function CalendarView({ bookings, workers = [] }: Props) {
+  const [view, setView] = useState<CalendarView>('vecka')
   const [current, setCurrent] = useState(new Date())
+  const [selectedBooking, setSelectedBooking] = useState<Booking | null>(null)
+  const [workerFilter, setWorkerFilter] = useState<string>('all')
+  const [statusFilter, setStatusFilter] = useState<BookingStatus | 'all'>('all')
 
-  const monthStart = startOfMonth(current)
-  const monthEnd = endOfMonth(current)
-  const calStart = startOfWeek(monthStart, { weekStartsOn: 1 })
-  const calEnd = endOfWeek(monthEnd, { weekStartsOn: 1 })
-  const days = eachDayOfInterval({ start: calStart, end: calEnd })
+  // Navigation
+  const navigate = (dir: -1 | 1) => {
+    setCurrent(prev => {
+      if (view === 'dag') return addDays(prev, dir)
+      if (view === 'vecka') return addDays(prev, dir * 7)
+      return new Date(prev.getFullYear(), prev.getMonth() + dir, 1)
+    })
+  }
 
-  const prev = () => setCurrent(d => new Date(d.getFullYear(), d.getMonth() - 1, 1))
-  const next = () => setCurrent(d => new Date(d.getFullYear(), d.getMonth() + 1, 1))
+  const goToday = () => setCurrent(new Date())
+
+  // Header title
+  const title = useMemo(() => {
+    if (view === 'dag') {
+      const today = new Date()
+      if (isSameDay(current, today)) return 'Idag'
+      return `${current.getDate()} ${MONTHS_SE[current.getMonth()]} ${current.getFullYear()}`
+    }
+    if (view === 'vecka') {
+      const ws = startOfWeek(current)
+      const we = addDays(ws, 6)
+      const wn = getWeekNumber(current)
+      if (ws.getMonth() === we.getMonth()) {
+        return `Vecka ${wn} · ${MONTHS_SE[ws.getMonth()]} ${ws.getFullYear()}`
+      }
+      return `Vecka ${wn} · ${MONTHS_SE[ws.getMonth()].slice(0, 3)}–${MONTHS_SE[we.getMonth()].slice(0, 3)} ${ws.getFullYear()}`
+    }
+    return `${MONTHS_SE[current.getMonth()]} ${current.getFullYear()}`
+  }, [view, current])
+
+  // Filtered bookings
+  const filtered = useMemo(() => {
+    return bookings.filter(b => {
+      if (workerFilter !== 'all' && b.assigned_worker_id !== workerFilter) return false
+      if (statusFilter !== 'all' && b.status !== statusFilter) return false
+      return true
+    })
+  }, [bookings, workerFilter, statusFilter])
+
+  const handleSelectDay = (day: Date) => {
+    setCurrent(day)
+    setView('dag')
+  }
 
   return (
-    <div className="rounded border border-border bg-card overflow-hidden">
-      {/* Header */}
-      <div className="flex items-center justify-between px-5 py-3.5 border-b border-border">
-        <div className="flex items-center gap-3">
-          <span className="text-sm font-semibold capitalize">
-            {format(current, 'MMMM', { locale: sv })}
-          </span>
-          <span className="label-caps">{format(current, 'yyyy')}</span>
-        </div>
-        <div className="flex gap-1">
+    <div className="relative flex flex-col h-full rounded border border-border bg-card overflow-hidden">
+      {/* Toolbar */}
+      <div className="flex items-center gap-3 px-4 py-3 border-b border-border shrink-0 flex-wrap gap-y-2">
+        {/* Today button */}
+        <button
+          onClick={goToday}
+          className="flex items-center gap-1.5 px-2.5 py-1.5 rounded border border-border text-xs font-medium hover:bg-secondary transition-colors"
+        >
+          <CalendarDays className="h-3.5 w-3.5" />
+          Idag
+        </button>
+
+        {/* Navigation */}
+        <div className="flex items-center gap-1">
           <button
-            onClick={prev}
-            className="h-7 w-7 flex items-center justify-center rounded text-muted-foreground hover:text-foreground hover:bg-secondary transition-colors"
+            onClick={() => navigate(-1)}
+            className="h-7 w-7 flex items-center justify-center rounded hover:bg-secondary transition-colors text-muted-foreground hover:text-foreground"
           >
-            <ChevronLeft className="h-3.5 w-3.5" />
+            <ChevronLeft className="h-4 w-4" />
           </button>
           <button
-            onClick={next}
-            className="h-7 w-7 flex items-center justify-center rounded text-muted-foreground hover:text-foreground hover:bg-secondary transition-colors"
+            onClick={() => navigate(1)}
+            className="h-7 w-7 flex items-center justify-center rounded hover:bg-secondary transition-colors text-muted-foreground hover:text-foreground"
           >
-            <ChevronRight className="h-3.5 w-3.5" />
+            <ChevronRight className="h-4 w-4" />
           </button>
         </div>
-      </div>
 
-      {/* Day headers */}
-      <div className="grid grid-cols-7 border-b border-border">
-        {DAYS_SE.map(d => (
-          <div key={d} className="py-2 text-center label-caps">
-            {d}
-          </div>
-        ))}
-      </div>
+        {/* Title */}
+        <span className="text-sm font-semibold">{title}</span>
 
-      {/* Grid */}
-      <div className="grid grid-cols-7">
-        {days.map(day => {
-          const dayBookings = bookings.filter(b => isSameDay(new Date(b.scheduled_at), day))
-          const isCurrentMonth = day.getMonth() === current.getMonth()
-          const isToday = dateFnsIsToday(day)
+        <div className="flex-1" />
 
-          return (
-            <div
-              key={day.toISOString()}
+        {/* Status filter */}
+        <select
+          value={statusFilter}
+          onChange={e => setStatusFilter(e.target.value as BookingStatus | 'all')}
+          className="h-7 text-xs rounded border border-border bg-secondary text-foreground px-2 focus:outline-none focus:ring-1 focus:ring-primary"
+        >
+          <option value="all">Alla statusar</option>
+          {ALL_STATUSES.map(s => (
+            <option key={s} value={s}>{STATUS_CONFIG[s].label}</option>
+          ))}
+        </select>
+
+        {/* Worker filter */}
+        {workers.length > 0 && (
+          <select
+            value={workerFilter}
+            onChange={e => setWorkerFilter(e.target.value)}
+            className="h-7 text-xs rounded border border-border bg-secondary text-foreground px-2 focus:outline-none focus:ring-1 focus:ring-primary"
+          >
+            <option value="all">Alla tekniker</option>
+            {workers.map(w => (
+              <option key={w.id} value={w.id}>{w.full_name}</option>
+            ))}
+          </select>
+        )}
+
+        {/* View switcher */}
+        <div className="flex rounded border border-border overflow-hidden">
+          {VIEWS.map(v => (
+            <button
+              key={v.key}
+              onClick={() => setView(v.key)}
               className={cn(
-                'min-h-[88px] p-2 border-b border-r border-border transition-colors',
-                !isCurrentMonth && 'opacity-25',
-                isToday && 'bg-primary/5',
-                'hover:bg-secondary/30 cursor-default'
+                'px-3 py-1 text-xs font-medium transition-colors',
+                view === v.key
+                  ? 'bg-primary text-primary-foreground'
+                  : 'text-muted-foreground hover:text-foreground hover:bg-secondary'
               )}
             >
-              <span
-                className={cn(
-                  'inline-flex h-6 w-6 items-center justify-center rounded text-xs tabular font-medium',
-                  isToday
-                    ? 'bg-primary text-primary-foreground font-semibold'
-                    : 'text-muted-foreground'
-                )}
-              >
-                {format(day, 'd')}
-              </span>
+              {v.label}
+            </button>
+          ))}
+        </div>
+      </div>
 
-              <div className="mt-1 space-y-0.5">
-                {dayBookings.slice(0, 3).map(b => (
-                  <div
-                    key={b.id}
-                    className="flex items-center gap-1.5 rounded px-1.5 py-0.5 text-xs truncate"
-                    style={{ background: `${STATUS_COLOR[b.status]}15` }}
-                    title={`${b.customer?.full_name} — ${b.service_type}`}
-                  >
-                    <span
-                      className="h-1 w-1 rounded-full shrink-0"
-                      style={{ background: STATUS_COLOR[b.status] }}
-                    />
-                    <span className="truncate text-foreground/80">
-                      {b.customer?.full_name ?? b.service_type}
-                    </span>
-                  </div>
-                ))}
-                {dayBookings.length > 3 && (
-                  <p className="label-caps pl-1">+{dayBookings.length - 3} till</p>
-                )}
-              </div>
-            </div>
+      {/* Status legend */}
+      <div className="flex items-center gap-4 px-4 py-2 border-b border-border shrink-0 overflow-x-auto">
+        {ALL_STATUSES.map(s => {
+          const cfg = STATUS_CONFIG[s]
+          const count = filtered.filter(b => b.status === s).length
+          return (
+            <button
+              key={s}
+              onClick={() => setStatusFilter(statusFilter === s ? 'all' : s)}
+              className={cn(
+                'flex items-center gap-1.5 shrink-0 transition-opacity',
+                statusFilter !== 'all' && statusFilter !== s && 'opacity-30'
+              )}
+            >
+              <div className="h-2 w-2 rounded-full" style={{ background: cfg.color }} />
+              <span className="label-caps">{cfg.label}</span>
+              <span className="label-caps tabular text-foreground">{count}</span>
+            </button>
           )
         })}
+      </div>
+
+      {/* Calendar body */}
+      <div className="flex-1 min-h-0 relative">
+        {view === 'månad' && (
+          <MonthView
+            current={current}
+            bookings={filtered}
+            onSelectBooking={setSelectedBooking}
+            onSelectDay={handleSelectDay}
+          />
+        )}
+        {view === 'vecka' && (
+          <WeekView
+            current={current}
+            bookings={filtered}
+            onSelectBooking={setSelectedBooking}
+          />
+        )}
+        {view === 'dag' && (
+          <DayView
+            current={current}
+            bookings={filtered}
+            onSelectBooking={setSelectedBooking}
+          />
+        )}
+
+        {/* Detail panel */}
+        {selectedBooking && (
+          <BookingDetailPanel
+            booking={selectedBooking}
+            onClose={() => setSelectedBooking(null)}
+          />
+        )}
       </div>
     </div>
   )
