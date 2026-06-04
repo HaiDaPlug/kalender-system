@@ -1,6 +1,7 @@
 'use client'
 
 import { useRouter, usePathname } from 'next/navigation'
+import { createClient } from '@/lib/supabase/client'
 import type { Profile } from '@/types'
 import { Bell, LogOut } from 'lucide-react'
 
@@ -22,9 +23,18 @@ export function TopBar({ profile }: { profile: Profile | null }) {
   )?.[1] ?? 'Portal'
 
   const handleSignOut = async () => {
+    const supabase = createClient()
+    await supabase.auth.signOut()
     router.push('/login')
     router.refresh()
   }
+
+  const initials = profile?.full_name
+    .split(' ')
+    .map(p => p[0])
+    .slice(0, 2)
+    .join('')
+    .toUpperCase() ?? '?'
 
   return (
     <header className="h-14 border-b border-border bg-background px-6 flex items-center justify-between shrink-0">
@@ -36,7 +46,12 @@ export function TopBar({ profile }: { profile: Profile | null }) {
         </span>
       </div>
 
-      <div className="flex items-center gap-1">
+      <div className="flex items-center gap-2">
+        {profile && (
+          <div className="h-7 w-7 rounded-full bg-primary/10 border border-primary/20 flex items-center justify-center text-xs font-semibold text-primary select-none">
+            {initials}
+          </div>
+        )}
         <button
           className="h-8 w-8 flex items-center justify-center rounded text-muted-foreground hover:text-foreground hover:bg-secondary transition-colors"
           aria-label="Notifikationer"

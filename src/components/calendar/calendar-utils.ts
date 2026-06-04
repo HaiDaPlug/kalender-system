@@ -70,3 +70,70 @@ export function getWeekNumber(date: Date): number {
 export function getBookingsForDay(bookings: Booking[], day: Date): Booking[] {
   return bookings.filter(b => isSameDay(new Date(b.scheduled_at), day))
 }
+
+export interface BookingLayout {
+  booking: Booking
+  top: number
+  height: number
+  lane: number
+  totalLanes: number
+}
+
+/**
+ * Computes non-overlapping lane positions for a set of bookings on the same day.
+ * Bookings that overlap in time are assigned to different lanes so they render
+ * side-by-side rather than on top of each other.
+ */
+export function computeBookingLayouts(bookings: Booking[]): BookingLayout[] {
+  if (bookings.length === 0) return []
+
+  // Sort by start time, then by duration descending (wider first)
+  const sorted = [...bookings].sort((a, b) => {
+    const ta = new Date(a.scheduled_at).getTime()
+    const tb = new Date(b.scheduled_at).getTime()
+    if (ta !== tb) return ta - tb
+    return b.estimated_duration_minutes - a.estimated_duration_minutes
+  })
+
+  const layouts: BookingLayout[] = sorted.map(b => ({
+    booking: b,
+    top: getBookingTop(b.scheduled_at),
+    height: getBookingHeight(b.estimated_duration_minutes),
+    lane: 0,
+    totalLanes: 1,
+  }))
+
+  // Assign lanes: find the first lane not occupied by an overlapping earlier booking
+  const endTimes: number[] = []
+
+  for (let i = 0; i < layouts.length; i++) {
+    const cur = layouts[i]
+    const startPx = cur.top
+    const endPx = cur.top + cur.height
+
+    let lane = 0
+    while (endTimes[lane] !== undefined && endTimes[lane] > startPx) {
+      lane++
+    }
+    cur.lane = lane
+    endTimes[lane] = endPx
+  }
+
+  // Re-calculate totalLanes per booking based on its actual overlap group
+  for (let i = 0; i < layouts.length; i++) {
+    const cur = layouts[i]
+    let groupMax = cur.lane
+    for (let j = 0; j < layouts.length; j++) {
+      if (i === j) continue
+      const other = layouts[j]
+      const overlapStart = Math.max(cur.top, other.top)
+      const overlapEnd = Math.min(cur.top + cur.height, other.top + other.height)
+      if (overlapEnd > overlapStart) {
+        groupMax = Math.max(groupMax, other.lane)
+      }
+    }
+    cur.totalLanes = groupMax + 1
+  }
+
+  return layouts
+}

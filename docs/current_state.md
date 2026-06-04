@@ -1,149 +1,156 @@
 # RenGör — Current State
-_Last updated: 2026-06-03_
+_Last updated: 2026-06-04 (webhook hardening)_
 
 ---
 
-## What was built this session
-
-### 1. Tech stack scaffolded from scratch
+## Tech stack
 
 | Layer | Choice |
 |---|---|
-| Framework | Next.js 15 / App Router, TypeScript, `src/` dir |
+| Framework | Next.js 16.2.7 / App Router, TypeScript, `src/` dir |
 | Styling | Tailwind CSS v4 + shadcn/ui |
 | Database / Auth | Supabase (Postgres + Auth) |
 | Image storage | Supabase Storage |
-| Client cache | TanStack Query |
+| Client cache | TanStack Query (installed, not yet wired to routes) |
 | GHL integration | HighLevel API v2 |
-| SMS | GHL Conversations API (provider abstraction ready for 46elks swap) |
-| Font | DM Sans + DM Mono |
+| SMS | GHL Conversations API (provider field ready for 46elks/Twilio swap) |
+| Font | DM Sans + DM Mono (Plus Jakarta Sans planned) |
 
 ---
 
-### 2. Database schema (`supabase/schema.sql`)
+## File structure — key files
 
-Full Postgres schema written and ready to run in Supabase SQL editor.
+```
+src/
+  proxy.ts                        # Next.js 16 auth proxy (currently passthrough)
+  lib/
+    supabase/
+      client.ts                   # typed browser client
+      server.ts                   # typed server client (Server Components / reads)
+      server-raw.ts               # untyped server client (mutation API routes)
+      service.ts                  # service-role client (bypasses RLS — webhooks only)
+      middleware.ts               # updateSession helper (used by proxy.ts when auth is on)
+    gohighlevel/
+      client.ts                   # GHL API v2 wrappers (calendar, contacts, conversations)
+      webhooks.ts                 # typed payload parsers for appointment + contact events
+  app/
+    (auth)/login/                 # Swedish login form
+    (dashboard)/
+      layout.tsx                  # reads real profile when session exists; dev stub otherwise
+      dashboard/                  # stats + recent bookings (hardcoded 0-state)
+      calendar/                   # full calendar page — fetches real data from Supabase
+      bookings/                   # table view (hardcoded empty)
+      jobs/                       # kanban board (hardcoded empty)
+      workers/                    # table (hardcoded empty)
+      settings/                   # placeholder
+    api/
+      bookings/                   # GET/POST list+create; GET/PATCH/DELETE single
+      jobs/[id]/images/           # POST upload before/after image to Storage
+      sms/send/                   # POST send SMS via GHL, write sms_log
+      webhooks/ghl/               # POST receive GHL appointment/contact webhooks
+  components/
+    calendar/
+      calendar-view.tsx           # toolbar, filters, status legend, view switcher
+      day-view.tsx                # 24h grid, lane-based overlap layout, live time line
+      week-view.tsx               # 7-col grid, same layout engine, per-column time line
+      month-view.tsx              # compact monthly grid, click to drill to day
+      booking-detail-panel.tsx    # slide-in detail panel, links to /bookings/[id]
+      calendar-utils.ts           # layout math: computeBookingLayouts, time helpers
+    layout/
+      sidebar.tsx
+      top-bar.tsx                 # shows user avatar initials, calls signOut() on logout
+      providers.tsx
+    auth/login-form.tsx
+    booking/bookings-table.tsx
+    jobs/jobs-board.tsx
+    workers/workers-table.tsx
+  types/
+    index.ts                      # Booking, CleaningJob, SmsLog, ActivityLog, etc.
+    database.ts                   # Supabase Database type stub
+supabase/
+  schema.sql                      # full initial schema (run once on a fresh DB)
+  migrations/
+    001_additive.sql              # additive migration for existing DBs (idempotent)
+```
+
+---
+
+## Database schema
 
 | Table | Purpose |
 |---|---|
-| `profiles` | Workers/admins (extends `auth.users` via trigger) |
+| `profiles` | Workers/admins (extends `auth.users` via trigger), roles: admin/manager/worker |
 | `customers` | Customer records, linked to GHL contact ID |
 | `cars` | Cars per customer (make, model, reg plate, VIN, color) |
-| `bookings` | Core booking: customer, car, worker, status, GHL appointment ID, SMS flag |
-| `cleaning_jobs` | Job execution: worker, status, started/completed timestamps, notes |
+| `bookings` | Core booking — customer, car, worker, status, GHL appointment ID, calendar_color, two SMS flags |
+| `cleaning_jobs` | Job execution — worker, status, started/completed timestamps, notes |
 | `job_images` | Before/after images with storage path, uploader, type |
-| `sms_logs` | Full SMS audit trail (status, provider message ID, error) |
-| `highlevel_sync_logs` | Webhook + sync audit trail |
+| `sms_logs` | SMS audit trail — type (confirmation/ready_for_pickup/manual), provider, delivery timestamp |
+| `activity_log` | Audit trail — who did what, actor_id enforced to match auth.uid() |
+| `highlevel_sync_logs` | Webhook + sync audit, unique index on (highlevel_id) for idempotency |
 
-RLS policies set on all tables. Auto-trigger creates `profiles` row on signup.
+RLS on all tables. Auto-trigger creates `profiles` row on signup.
 
----
-
-### 3. Supabase client setup (`src/lib/supabase/`)
-
-- `client.ts` — typed browser client
-- `server.ts` — typed server client (for read paths in Server Components)
-- `server-raw.ts` — untyped server client (for API routes that accept dynamic JSON)
-- `middleware.ts` — session refresh (currently bypassed for dev)
-
----
-
-### 4. GoHighLevel integration layer (`src/lib/gohighlevel/`)
-
-- `client.ts` — full API v2 wrappers: `ghlCalendar`, `ghlContacts`, `ghlConversations`
-- `webhooks.ts` — typed payload parsers for appointment + contact events
+**New columns added via `001_additive.sql`** (use this for existing DBs):
+- `bookings.calendar_color` — hex color override for calendar display
+- `bookings.sms_ready_for_pickup_sent` — second SMS flag for "car is ready" flow
+- `sms_logs.sms_type`, `sms_logs.provider`, `sms_logs.provider_message_id`, `sms_logs.delivery_callback_at`
+- SMS unique partial index prevents duplicate auto-sends (blocks pending + sent, not just sent)
+- `images_insert_auth` policy dropped; replaced with `images_insert_own_job` (workers can only upload to their own job)
+- `activity_log_insert` enforces `auth.uid() = actor_id` (entries cannot be forged)
 
 ---
 
-### 5. API routes (`src/app/api/`)
+## Auth
 
-| Route | Method | Purpose |
+- Supabase Auth, three roles: `admin` / `manager` / `worker`
+- **Currently bypassed** — `src/proxy.ts` returns `NextResponse.next()` unconditionally
+- Dashboard layout falls back to a `DEV_PROFILE` stub when no session exists
+- Calendar page falls back to service-role client in `development` only (gated on `NODE_ENV`)
+- **To enable auth**: replace `proxy.ts` body with `return updateSession(request)`, remove `DEV_PROFILE` fallback from `layout.tsx`
+
+Logout calls `supabase.auth.signOut()` before redirecting (was missing before).
+
+---
+
+## Calendar — the main feature
+
+Full Google Calendar-like experience, Swedish UI, three views:
+
+**Dag (Day):** 24h vertical time grid, booking blocks proportional to duration, lane-based overlap layout (concurrent bookings render side-by-side, not on top of each other), live current-time line updating every 60s, SMS dot, click → detail panel.
+
+**Vecka (Week):** 7-column grid with week number, same lane layout per column, current-time line on today only.
+
+**Månad (Month):** compact monthly grid, up to 3 events per cell, click day → drills to dag view.
+
+**Toolbar:** Idag button, prev/next navigation, status filter, worker filter, status legend with per-status counts.
+
+**Booking detail panel:** slides in on click, shows service/time/address, customer name+phone, car make/model/plate/color, assigned worker, notes, SMS status. "Öppna bokning" links to `/bookings/[id]`.
+
+**Data:** fetched server-side from Supabase at page load. Bookings and active workers.
+
+---
+
+## GHL webhook (`/api/webhooks/ghl`)
+
+- **Signature:** Ed25519 via `X-GHL-Signature`. Reads `GHL_WEBHOOK_PUBLIC_KEY` — must be the raw 32-byte Ed25519 public key, base64-encoded (NOT DER/SPKI). Missing key rejects all requests in production; skipped only in `NODE_ENV=development`.
+- **Idempotency key:** `${type}:${entityId}:${contentHash}` — content hash covers the mutable fields (status, startTime, endTime for appointments; name/email/phone for contacts). Identical retries deduplicate; genuine updates with different content get a new key and are processed.
+- **Race-safe flow:** row is inserted as `success=false` before processing (outside the unique index). On success it is flipped to `success=true` (entering the index). A crash before the flip leaves a retryable failed row. Two concurrent requests for the same delivery both process (business ops are idempotent) and whichever commits first wins.
+- **Unique index:** partial on `action = 'webhook_received' AND success = true` — failed rows are excluded so retries are never permanently blocked.
+- **Client:** uses service-role client to bypass RLS (safe because request is verified first).
+- **Payload shape:** appointment fields are nested under `appointment{}`. Uses `apt.appointmentStatus` not `apt.status`.
+
+---
+
+## API routes
+
+| Route | Methods | Notes |
 |---|---|---|
-| `/api/bookings` | GET, POST | List/create bookings |
+| `/api/bookings` | GET, POST | Filters: status, worker_id, from, to |
 | `/api/bookings/[id]` | GET, PATCH, DELETE | Single booking CRUD |
-| `/api/jobs/[id]/images` | POST | Upload before/after image to Supabase Storage |
-| `/api/sms/send` | POST | Send SMS via GHL, write SMS log |
-| `/api/webhooks/ghl` | POST | Receive GHL appointment/contact webhooks |
-
----
-
-### 6. Auth
-
-- Supabase Auth with three roles: `admin`, `manager`, `worker`
-- **Currently bypassed for local dev** — `DEV_PROFILE` stub in dashboard layout, middleware returns `NextResponse.next()` unconditionally
-- To re-enable: restore `src/middleware.ts` to call `updateSession` and restore `src/app/(dashboard)/layout.tsx` to fetch real user
-
----
-
-### 7. Design system
-
-- **Theme**: Swedish industrial dark — near-black `#0A0A0B`, warm off-white `#F0EDE8`, Swedish yellow `#F5C842` as single accent
-- **Typography**: DM Sans (body), DM Mono (numbers/code)
-- **Language**: 100% Swedish UI (nav, headings, empty states, status labels, dates)
-- **Globals**: custom scrollbar, `label-caps` utility, `animate-fade-up`, tabular nums
-
----
-
-### 8. Pages built
-
-| Route | Status |
-|---|---|
-| `/dashboard` | Stats (0-state) + recent bookings list |
-| `/calendar` | Full Google Calendar-like view (see below) |
-| `/bookings` | Table with status badges |
-| `/jobs` | Kanban board (4 columns) |
-| `/workers` | Table with avatar initials |
-| `/settings` | Placeholder |
-| `/login` | Swedish login form (Supabase auth, bypassed) |
-
----
-
-### 9. Calendar — the main feature built this session
-
-A full Google Calendar-like experience built from scratch, specific to the car cleaning workflow.
-
-#### Three views
-
-**Dagvy (Day):**
-- Full 24h vertical time grid
-- Booking blocks sized proportionally to duration in minutes
-- Red current-time indicator line
-- Event card shows: customer name, car make/model, reg plate, worker, status badge, SMS dot (green = sent, grey = not sent)
-- Customer notes visible on tall events
-- Click event → detail panel
-
-**Veckovy (Week):**
-- 7-column time grid with week number (V.xx format)
-- Same proportional event blocks
-- Current-time line on today's column only
-- 3 detail levels depending on event height (name → car → worker)
-- SMS dot on all events
-
-**Månadsvy (Month):**
-- Compact monthly grid
-- Up to 3 events shown per cell with left-border color coding
-- Click day → drills into dag view
-
-#### Filters
-- Status filter dropdown (Alla statusar / Väntande / Bekräftad / Pågående / Klar / Avbokad)
-- Worker filter dropdown (populated from workers prop)
-- Status legend bar — click any status pill to filter/unfilter instantly with counts
-
-#### Booking detail side panel
-Slides in on event click, shows:
-- Status badge
-- Service type + time + address
-- Customer name + phone
-- Car make/model + reg plate + color
-- Assigned worker (avatar initial)
-- Customer notes
-- Internal service notes
-- SMS confirmation status
-
-#### Navigation
-- Idag button (jump to today)
-- Prev/next chevrons (moves by day/week/month depending on view)
-- Swedish month names, Swedish day abbreviations (Mån–Sön), week numbers
+| `/api/jobs/[id]/images` | POST | Upload to Supabase Storage |
+| `/api/sms/send` | POST | Manual SMS via GHL; writes sms_log |
+| `/api/webhooks/ghl` | POST | GHL appointment/contact sync |
 
 ---
 
@@ -151,33 +158,39 @@ Slides in on event click, shows:
 
 | Feature | Priority |
 |---|---|
-| Booking detail page (`/bookings/[id]`) | High |
-| Create booking form + booking confirmation SMS | High |
-| Two-SMS flow (order confirmation + cleaning complete) | High |
-| 46elks SMS provider (vs GHL) — decision pending | Medium |
-| `/my-cars` and `/my-cars/today` worker views | High |
+| Booking detail page (`/bookings/[id]`) | High — "Öppna bokning" links here but page is 404 |
+| Create booking form | High |
+| Auto-SMS on booking create (confirmation) | High |
+| Auto-SMS on job complete (ready for pickup) | High |
+| 46elks SMS provider — decision pending | Medium |
+| Worker views (`/my-cars`, `/my-cars/today`) | High |
 | `/customers` and `/cars` pages | Medium |
-| `/settings/integrations/highlevel` page | Medium |
-| Activity logs (who did what, when) | Medium |
+| Activity log UI | Medium |
 | Image thumbnail gallery on booking detail | Medium |
-| Smart alerts (missing worker, overdue, SMS failed) | Medium |
-| Supabase Auth wired up (currently bypassed) | High — before any real use |
-| Real data wired to calendar/bookings/jobs pages | High — requires Supabase credentials in `.env.local` |
+| TanStack Query wired (installed but unused) | Medium |
+| `/settings/integrations/highlevel` page | Medium |
+| Supabase Auth fully enabled (proxy.ts is passthrough) | **Before any real use** |
+| Real data on bookings/jobs/workers pages (only calendar is live) | High |
 | Drag-and-drop booking movement on calendar | Low |
+| Plus Jakarta Sans font (planned) | Low |
+| GHL_WEBHOOK_PUBLIC_KEY set to GHL's raw Ed25519 public key (base64) | Before webhooks go live |
 
 ---
 
 ## To get the app running locally
 
 ```bash
-# 1. Install dependencies (already done)
+# 1. Install dependencies
 npm install
 
-# 2. Copy env file and fill in your Supabase + GHL credentials
-cp .env.local.example .env.local
+# 2. Fill in credentials
+# Edit .env.local — Supabase URL/keys are already set, add GHL keys
 
-# 3. Run schema in Supabase SQL editor
-# → paste contents of supabase/schema.sql
+# 3. Run schema on a fresh Supabase DB
+# → paste supabase/schema.sql into Supabase SQL editor
+
+# OR for an existing DB, run the migration:
+# → paste supabase/migrations/001_additive.sql
 
 # 4. Create storage buckets in Supabase dashboard
 # → car-before-images
@@ -185,8 +198,11 @@ cp .env.local.example .env.local
 
 # 5. Start dev server
 npm run dev
-# → http://localhost:3000 (redirects to /dashboard, auth bypassed)
+# → http://localhost:3000 (redirects to /dashboard, auth bypassed, calendar shows real data)
 ```
+
+**Build:** `npm run build` — passes, 0 errors  
+**Lint:** `npm run lint` — passes, 0 errors, 0 warnings
 
 ---
 

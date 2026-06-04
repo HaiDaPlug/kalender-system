@@ -60,7 +60,9 @@ export interface Booking {
   total_price?: number
   highlevel_appointment_id?: string
   highlevel_calendar_id?: string
+  calendar_color?: string
   sms_confirmation_sent: boolean
+  sms_ready_for_pickup_sent: boolean
   created_at: string
   updated_at: string
   customer?: Customer
@@ -97,17 +99,37 @@ export interface ImageRecord {
   created_at: string
 }
 
+export type SmsType = 'confirmation' | 'ready_for_pickup' | 'manual'
+export type SmsProvider = 'highlevel' | '46elks' | 'twilio'
+
 export interface SmsLog {
   id: string
   booking_id: string
   customer_id: string
   phone_number: string
   message_body: string
+  sms_type: SmsType
   status: SmsStatus
+  provider: SmsProvider
   highlevel_message_id?: string
+  provider_message_id?: string
+  delivery_callback_at?: string
   sent_at?: string
   error_message?: string
   created_at: string
+}
+
+export type ActivityEntityType = 'booking' | 'job' | 'customer' | 'car' | 'worker'
+
+export interface ActivityLog {
+  id: string
+  actor_id?: string
+  entity_type: ActivityEntityType
+  entity_id: string
+  action: string
+  metadata?: Record<string, unknown>
+  created_at: string
+  actor?: Profile
 }
 
 export interface HighLevelSyncLog {

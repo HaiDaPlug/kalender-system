@@ -9,18 +9,33 @@ import {
   startOfWeek,
   addDays,
   formatTime,
-  getBookingTop,
-  getBookingHeight,
   getBookingsForDay,
+  computeBookingLayouts,
   getWeekNumber,
 } from './calendar-utils'
 import { cn } from '@/lib/utils/cn'
-import { useRef, useEffect } from 'react'
+import { useRef, useEffect, useState } from 'react'
 
 interface Props {
   current: Date
   bookings: Booking[]
   onSelectBooking: (b: Booking) => void
+}
+
+function calcTimePx() {
+  const now = new Date()
+  return (now.getHours() + now.getMinutes() / 60) * 64
+}
+
+function useCurrentTimePx(): number {
+  const [px, setPx] = useState(calcTimePx)
+
+  useEffect(() => {
+    const id = setInterval(() => setPx(calcTimePx()), 60_000)
+    return () => clearInterval(id)
+  }, [])
+
+  return px
 }
 
 export function WeekView({ current, bookings, onSelectBooking }: Props) {
@@ -29,10 +44,11 @@ export function WeekView({ current, bookings, onSelectBooking }: Props) {
   const weekStart = startOfWeek(current)
   const weekDays = Array.from({ length: 7 }, (_, i) => addDays(weekStart, i))
   const weekNum = getWeekNumber(current)
+  const timePx = useCurrentTimePx()
 
   useEffect(() => {
     if (scrollRef.current) {
-      scrollRef.current.scrollTop = 7 * 64 // scroll to 07:00
+      scrollRef.current.scrollTop = 7 * 64
     }
   }, [])
 
@@ -74,6 +90,7 @@ export function WeekView({ current, bookings, onSelectBooking }: Props) {
           {/* Day columns */}
           {weekDays.map((day, di) => {
             const dayBookings = getBookingsForDay(bookings, day)
+            const layouts = computeBookingLayouts(dayBookings)
             const isToday = isSameDay(day, today)
 
             return (
@@ -103,20 +120,26 @@ export function WeekView({ current, bookings, onSelectBooking }: Props) {
                   />
                 ))}
 
-                {/* Bookings */}
-                {dayBookings.map(b => {
+                {/* Bookings — lane-positioned */}
+                {layouts.map(({ booking: b, top, height, lane, totalLanes }) => {
                   const cfg = STATUS_CONFIG[b.status]
-                  const top = getBookingTop(b.scheduled_at)
-                  const height = getBookingHeight(b.estimated_duration_minutes)
+                  const gutter = 2
+                  const colW = `calc((100% - ${gutter}px) / ${totalLanes})`
+                  const colLeft = `calc(${lane} * (100% - ${gutter}px) / ${totalLanes} + ${lane > 0 ? gutter / totalLanes : 0}px)`
 
                   return (
                     <div
                       key={b.id}
                       onClick={() => onSelectBooking(b)}
-                      className="absolute left-1 right-1 rounded overflow-hidden cursor-pointer hover:brightness-110 transition-all z-10"
+                      role="button"
+                      tabIndex={0}
+                      onKeyDown={e => e.key === 'Enter' && onSelectBooking(b)}
+                      className="absolute rounded overflow-hidden cursor-pointer hover:brightness-110 transition-all z-10"
                       style={{
                         top: `${top}px`,
                         height: `${height}px`,
+                        left: colLeft,
+                        width: colW,
                         background: cfg.bg,
                         borderLeft: `2px solid ${cfg.color}`,
                       }}
@@ -155,19 +178,15 @@ export function WeekView({ current, bookings, onSelectBooking }: Props) {
                   )
                 })}
 
-                {/* Current time line */}
-                {isToday && (() => {
-                  const now = new Date()
-                  const topPx = (now.getHours() + now.getMinutes() / 60) * 64
-                  return (
-                    <div className="absolute left-0 right-0 z-20 pointer-events-none" style={{ top: `${topPx}px` }}>
-                      <div className="flex items-center">
-                        <div className="h-2 w-2 rounded-full bg-primary ml-[-4px]" />
-                        <div className="flex-1 h-px bg-primary" />
-                      </div>
+                {/* Current time line — updates every minute */}
+                {isToday && (
+                  <div className="absolute left-0 right-0 z-20 pointer-events-none" style={{ top: `${timePx}px` }}>
+                    <div className="flex items-center">
+                      <div className="h-2 w-2 rounded-full bg-primary ml-[-4px]" />
+                      <div className="flex-1 h-px bg-primary" />
                     </div>
-                  )
-                })()}
+                  </div>
+                )}
               </div>
             )
           })}

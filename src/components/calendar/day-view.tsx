@@ -8,11 +8,10 @@ import {
   WEEK_DAYS_SE,
   isSameDay,
   formatTime,
-  getBookingTop,
-  getBookingHeight,
   getBookingsForDay,
+  computeBookingLayouts,
 } from './calendar-utils'
-import { useRef, useEffect } from 'react'
+import { useRef, useEffect, useState } from 'react'
 
 interface Props {
   current: Date
@@ -20,12 +19,30 @@ interface Props {
   onSelectBooking: (b: Booking) => void
 }
 
+function calcTimePx() {
+  const now = new Date()
+  return (now.getHours() + now.getMinutes() / 60) * 64
+}
+
+function useCurrentTimePx(): number {
+  const [px, setPx] = useState(calcTimePx)
+
+  useEffect(() => {
+    const id = setInterval(() => setPx(calcTimePx()), 60_000)
+    return () => clearInterval(id)
+  }, [])
+
+  return px
+}
+
 export function DayView({ current, bookings, onSelectBooking }: Props) {
   const scrollRef = useRef<HTMLDivElement>(null)
   const today = new Date()
   const isToday = isSameDay(current, today)
   const dayBookings = getBookingsForDay(bookings, current)
+  const layouts = computeBookingLayouts(dayBookings)
   const dowIndex = current.getDay() === 0 ? 6 : current.getDay() - 1
+  const timePx = useCurrentTimePx()
 
   useEffect(() => {
     if (scrollRef.current) {
@@ -71,20 +88,26 @@ export function DayView({ current, bookings, onSelectBooking }: Props) {
               <div key={`h${h}`} className="absolute left-0 right-0 border-t border-border/20" style={{ top: `${h * 64 + 32}px` }} />
             ))}
 
-            {/* Bookings */}
-            {dayBookings.map(b => {
+            {/* Bookings — lane-positioned to avoid overlap */}
+            {layouts.map(({ booking: b, top, height, lane, totalLanes }) => {
               const cfg = STATUS_CONFIG[b.status]
-              const top = getBookingTop(b.scheduled_at)
-              const height = getBookingHeight(b.estimated_duration_minutes)
+              const gutter = 4
+              const colW = `calc((100% - ${gutter}px) / ${totalLanes})`
+              const colLeft = `calc(${lane} * (100% - ${gutter}px) / ${totalLanes} + ${lane > 0 ? gutter / totalLanes : 0}px)`
 
               return (
                 <div
                   key={b.id}
                   onClick={() => onSelectBooking(b)}
-                  className="absolute left-2 right-2 rounded overflow-hidden cursor-pointer hover:brightness-110 transition-all z-10"
+                  role="button"
+                  tabIndex={0}
+                  onKeyDown={e => e.key === 'Enter' && onSelectBooking(b)}
+                  className="absolute rounded overflow-hidden cursor-pointer hover:brightness-110 transition-all z-10"
                   style={{
                     top: `${top}px`,
                     height: `${height}px`,
+                    left: colLeft,
+                    width: colW,
                     background: cfg.bg,
                     borderLeft: `3px solid ${cfg.color}`,
                   }}
@@ -137,19 +160,15 @@ export function DayView({ current, bookings, onSelectBooking }: Props) {
               )
             })}
 
-            {/* Current time line */}
-            {isToday && (() => {
-              const now = new Date()
-              const topPx = (now.getHours() + now.getMinutes() / 60) * 64
-              return (
-                <div className="absolute left-0 right-0 z-20 pointer-events-none" style={{ top: `${topPx}px` }}>
-                  <div className="flex items-center">
-                    <div className="h-2 w-2 rounded-full bg-primary ml-[-4px]" />
-                    <div className="flex-1 h-px bg-primary" />
-                  </div>
+            {/* Current time line — updates every minute */}
+            {isToday && (
+              <div className="absolute left-0 right-0 z-20 pointer-events-none" style={{ top: `${timePx}px` }}>
+                <div className="flex items-center">
+                  <div className="h-2 w-2 rounded-full bg-primary ml-[-4px]" />
+                  <div className="flex-1 h-px bg-primary" />
                 </div>
-              )
-            })()}
+              </div>
+            )}
           </div>
         </div>
       </div>

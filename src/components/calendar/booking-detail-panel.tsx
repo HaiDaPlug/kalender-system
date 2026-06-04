@@ -1,5 +1,6 @@
 'use client'
 
+import Link from 'next/link'
 import type { Booking } from '@/types'
 import { STATUS_CONFIG, formatTime, formatDate } from './calendar-utils'
 import { X, User, Car, Phone, MessageSquare, Clock, MapPin, Wrench } from 'lucide-react'
@@ -183,9 +184,12 @@ export function BookingDetailPanel({ booking, onClose }: Props) {
 
         {/* Footer actions */}
         <div className="p-4 border-t border-border space-y-2">
-          <button className="w-full text-sm font-medium py-2 rounded border border-border hover:bg-secondary transition-colors">
+          <Link
+            href={`/bookings/${booking.id}`}
+            className="block w-full text-center text-sm font-medium py-2 rounded border border-border hover:bg-secondary transition-colors"
+          >
             Öppna bokning
-          </button>
+          </Link>
         </div>
       </div>
     </>

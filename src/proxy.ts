@@ -1,8 +1,7 @@
-import { type NextRequest } from 'next/server'
 import { NextResponse } from 'next/server'
 
-// Auth bypassed for local development
-export async function middleware(_request: NextRequest) {
+// Auth bypassed for local development — replace with updateSession when ready.
+export function proxy() {
   return NextResponse.next()
 }
 

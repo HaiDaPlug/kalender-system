@@ -1,5 +1,4 @@
 import type { CleaningJob } from '@/types'
-import { cn } from '@/lib/utils/cn'
 import { format } from 'date-fns'
 import { sv } from 'date-fns/locale'
 
@@ -76,15 +75,15 @@ export function JobsBoard({ jobs }: { jobs: CleaningJob[] }) {
                   className="rounded border border-border bg-secondary/30 p-3 space-y-2 hover:bg-secondary/60 transition-colors cursor-default"
                 >
                   <p className="text-sm font-medium text-foreground truncate leading-tight">
-                    {(job.booking as any)?.customer?.full_name ?? 'Okänd kund'}
+                    {job.booking?.customer?.full_name ?? 'Okänd kund'}
                   </p>
                   <p className="text-xs text-muted-foreground">
-                    {(job.booking as any)?.car?.make} {(job.booking as any)?.car?.model}
+                    {job.booking?.car?.make} {job.booking?.car?.model}
                   </p>
 
                   <div className="pt-1 border-t border-border flex items-center justify-between">
                     <span className="text-xs text-muted-foreground/70">
-                      {(job.worker as any)?.full_name ?? '—'}
+                      {job.worker?.full_name ?? '—'}
                     </span>
                     {job.started_at && (
                       <span className="label-caps tabular">

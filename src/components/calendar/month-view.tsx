@@ -4,7 +4,6 @@ import type { Booking } from '@/types'
 import {
   STATUS_CONFIG,
   WEEK_DAYS_SE,
-  MONTHS_SE,
   isSameDay,
   formatTime,
   getBookingsForDay,

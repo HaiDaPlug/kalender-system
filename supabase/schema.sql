@@ -84,7 +84,9 @@ create table if not exists bookings (
   total_price                  numeric(10,2),
   highlevel_appointment_id     text unique,
   highlevel_calendar_id        text,
+  calendar_color               text,                          -- optional hex color override for calendar display
   sms_confirmation_sent        boolean not null default false,
+  sms_ready_for_pickup_sent    boolean not null default false,
   created_at                   timestamptz not null default now(),
   updated_at                   timestamptz not null default now()
 );
@@ -132,13 +134,40 @@ create table if not exists sms_logs (
   customer_id           uuid not null references customers(id),
   phone_number          text not null,
   message_body          text not null,
+  sms_type              text not null default 'manual'
+                          check (sms_type in ('confirmation', 'ready_for_pickup', 'manual')),
   status                text not null default 'pending'
                           check (status in ('pending','sent','delivered','failed')),
+  provider              text not null default 'highlevel'
+                          check (provider in ('highlevel', '46elks', 'twilio')),
   highlevel_message_id  text,
+  provider_message_id   text,
+  delivery_callback_at  timestamptz,
   sent_at               timestamptz,
   error_message         text,
   created_at            timestamptz not null default now()
 );
+
+-- Prevents duplicate auto-SMS sends. Covers pending + sent so a second attempt
+-- cannot be inserted while one is already in-flight.
+create unique index if not exists sms_logs_booking_type_sent_idx
+  on sms_logs(booking_id, sms_type)
+  where sms_type in ('confirmation', 'ready_for_pickup')
+    and status not in ('failed');
+
+-- ── Activity Log ──────────────────────────────────────────────────────────
+create table if not exists activity_log (
+  id           uuid primary key default uuid_generate_v4(),
+  actor_id     uuid references profiles(id),
+  entity_type  text not null check (entity_type in ('booking','job','customer','car','worker')),
+  entity_id    uuid not null,
+  action       text not null,
+  metadata     jsonb,
+  created_at   timestamptz not null default now()
+);
+
+create index if not exists activity_log_entity_idx on activity_log(entity_type, entity_id);
+create index if not exists activity_log_actor_idx  on activity_log(actor_id);
 
 -- ── HighLevel Sync Logs ───────────────────────────────────────────────────
 create table if not exists highlevel_sync_logs (
@@ -153,6 +182,12 @@ create table if not exists highlevel_sync_logs (
   created_at     timestamptz not null default now()
 );
 
+-- Idempotency: one successful processed delivery per highlevel_id.
+-- Failed rows (success = false) are excluded so retries can re-insert and try again.
+create unique index if not exists sync_logs_idempotency_idx
+  on highlevel_sync_logs(highlevel_id)
+  where action = 'webhook_received' and success = true;
+
 -- ── Row Level Security ────────────────────────────────────────────────────
 alter table profiles           enable row level security;
 alter table customers          enable row level security;
@@ -161,6 +196,7 @@ alter table bookings           enable row level security;
 alter table cleaning_jobs      enable row level security;
 alter table job_images         enable row level security;
 alter table sms_logs           enable row level security;
+alter table activity_log       enable row level security;
 alter table highlevel_sync_logs enable row level security;
 
 -- Profiles: users see their own, admins/managers see all
@@ -195,12 +231,20 @@ create policy "jobs_update_own" on cleaning_jobs for update
     select 1 from profiles where id = auth.uid() and role in ('admin','manager')
   ));
 
--- Job images: authenticated users can insert/read
+-- Job images: workers may only insert images for jobs assigned to them
 create policy "images_select_auth" on job_images for select
   using (auth.uid() is not null);
 
-create policy "images_insert_auth" on job_images for insert
-  with check (auth.uid() is not null);
+create policy "images_insert_own_job" on job_images for insert
+  with check (
+    auth.uid() = uploaded_by and (
+      exists (
+        select 1 from cleaning_jobs where id = job_id and worker_id = auth.uid()
+      ) or exists (
+        select 1 from profiles where id = auth.uid() and role in ('admin','manager')
+      )
+    )
+  );
 
 -- Customers: all authenticated can read; admins can write
 create policy "customers_select_auth" on customers for select
@@ -220,11 +264,19 @@ create policy "cars_write_admin" on cars for all
     select 1 from profiles where id = auth.uid() and role in ('admin','manager')
   ));
 
--- SMS logs: admins only
+-- SMS logs: admins only (service role bypasses RLS for webhook/auto sends)
 create policy "sms_logs_admin" on sms_logs for all
   using (exists (
     select 1 from profiles where id = auth.uid() and role = 'admin'
   ));
+
+-- Activity log: all authenticated can read; actor_id must match the caller
+-- so log entries cannot be forged by another user.
+create policy "activity_log_select" on activity_log for select
+  using (auth.uid() is not null);
+
+create policy "activity_log_insert" on activity_log for insert
+  with check (auth.uid() = actor_id);
 
 -- Sync logs: admins only
 create policy "sync_logs_admin" on highlevel_sync_logs for all
