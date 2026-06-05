@@ -59,7 +59,7 @@
   --accent: #1C1C20;
   --accent-foreground: #F0EDE8;
   --destructive: #E05252;
-  --border: #1E1E23;
+  --border: #2E2E36;
   --input: #1C1C20;
   --ring: #F5C842;
   --radius: 0.375rem;
@@ -70,7 +70,7 @@
   --sidebar-primary-foreground: #0A0A0B;
   --sidebar-accent: #1C1C20;
   --sidebar-accent-foreground: #F0EDE8;
-  --sidebar-border: #1E1E23;
+  --sidebar-border: #2E2E36;
   --sidebar-ring: #F5C842;
 
   /* Status colors */

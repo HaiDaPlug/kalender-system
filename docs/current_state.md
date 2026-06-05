@@ -1,5 +1,5 @@
 # KOM-fort Bilvård — Portal: Current State
-_Last updated: 2026-06-05 (post-audit fixes)_
+_Last updated: 2026-06-05_
 
 ---
 
@@ -9,7 +9,6 @@ Internal all-in-one system for KOM-fort Bilvård. The calendar is the core — e
 Built specifically for Göran's and the workers' daily workflow, not a generic calendar tool.
 
 - **Repo:** [github.com/HaiDaPlug/kalender-system](https://github.com/HaiDaPlug/kalender-system)
-- **Local:** `/Users/erikryden/kalender-system`
 - **Dev server:** `npm run dev` → http://localhost:3000
 
 ---
@@ -20,12 +19,12 @@ Built specifically for Göran's and the workers' daily workflow, not a generic c
 |---|---|
 | Framework | Next.js 16.2.7 / App Router, TypeScript, `src/` structure |
 | Styling | Tailwind CSS v4 + shadcn/ui, dark theme, Swedish yellow accent (#F5C842) |
-| Animations | Framer Motion (modal transitions, panel slides) |
 | Database / Auth | Supabase (Postgres + Auth) — Hai's project: `vsnbaylcgcksabwradgu` |
 | Image storage | Supabase Storage |
 | GHL integration | HighLevel API v2 |
 | SMS | GHL Conversations API (ready for 46elks swap) |
 | Font | DM Sans + DM Mono |
+| Animations | Framer Motion (installed, used for modal/panel transitions) |
 
 ---
 
@@ -70,18 +69,19 @@ src/
       jobs/[id]/images/route.ts        # POST upload image to Storage
   components/
     ui/
-      modal.tsx                        # ✅ Shared Modal + SidePanel (CSS transitions, escape key, delayed unmount)
+      modal.tsx                        # ✅ Reusable Modal + SidePanel with smooth CSS transitions
+      button.tsx
     calendar/
       calendar-view.tsx                # Toolbar, filters, view switcher, "New booking" button
-      day-view.tsx                     # 24h grid, hover slot (1h) with +, live time line
-      week-view.tsx                    # 7-col grid, hover slot per column
+      day-view.tsx                     # 24h grid, 15-min snap slot clicks, live time line
+      week-view.tsx                    # 7-col grid, 15-min snap per column
       month-view.tsx                   # Month view, click → day view
       booking-detail-panel.tsx         # Slide-in panel from right on booking click
       calendar-utils.ts                # Layout math, time helpers, HOUR_PX constant
       create-booking-modal.tsx         # ✅ Modal: customer, car, service, status, worker, price
     shifts/
       create-shift-modal.tsx           # ✅ Modal for worker to submit a shift
-      pending-shifts-banner.tsx        # ✅ Yellow banner on dashboard — reviewerId prop (no hardcoded id)
+      pending-shifts-banner.tsx        # ✅ Yellow banner on dashboard — Göran approves directly
       pending-shifts-panel.tsx         # Reusable panel for pending shifts
     layout/
       sidebar.tsx                      # Side menu with nav links
@@ -135,8 +135,8 @@ supabase/
 
 Three views: **Day / Week / Month**
 
-- Click on empty slot (1h) → hover highlights with `+` → opens "New booking" modal with time prefilled
-- Modal remounts on each new slot click (`key={time.toISOString()}`) — form always resets to correct time
+- Hover over empty time → 30-min highlight block appears, snapped to **15-min grid**, showing the time label in the top-left corner (Google Calendar style)
+- Click → opens "New booking" modal with time prefilled (15-min precision: :00 / :15 / :30 / :45)
 - Click on existing booking → detail panel slides in from right
 - "New booking" button in toolbar → same modal
 - Double bookings allowed — no blocking in API
@@ -147,20 +147,34 @@ Three views: **Day / Week / Month**
 
 ## Calendar — technical notes
 
-- **`HOUR_PX = 72`** in `calendar-utils.ts` — base font 18px makes `h-16` (4rem) = 72px per hour row. All pixel calculations (time line, slot clicks, booking height, hour lines, scroll targets) use this constant. Never hardcode `64`.
+- **`HOUR_PX = 72`** in `calendar-utils.ts` — base font 18px makes `h-16` (4rem) = 72px per hour row. All pixel calculations use this constant. Never hardcode `64`.
+- **Slot click fix:** `getSlotFromEvent` uses `scrollRef.current.getBoundingClientRect()` (the scroll container), not the inner column div — prevents double-counting scroll offset.
+- **15-min snap:** `Math.floor(y / (HOUR_PX / 4)) * 15` — one slot = `HOUR_PX / 4` pixels.
+- **Hover block:** always 30 min tall (`HOUR_PX / 2`), top transitions at 80ms for a gliding feel.
 - Auto-scrolls to current time on load (day + week views).
 - Time line in week view spans all 7 columns as a single absolute element.
-- Slot click uses `scrollRef.current.scrollTop` directly — not `.closest('.overflow-y-auto')`.
 - Supabase key is `NEXT_PUBLIC_SUPABASE_PUBLISHABLE_KEY` (not `ANON_KEY`).
+
+---
+
+## Popup transitions (`src/components/ui/modal.tsx`)
+
+Two exported components — pure CSS transitions, no spring physics:
+
+- **`<Modal>`** — centered dialog. Backdrop fades in (180ms), card lifts 6px + fades (180ms ease). Exit reverses cleanly. `useDelayedUnmount` keeps the element in the DOM until the exit transition finishes before React unmounts it.
+- **`<SidePanel>`** — slides in from the right with `cubic-bezier(0.4,0,0.2,1)` (220ms), exits the same direction (200ms). Backdrop fades independently.
+- Both close on `Escape` key and backdrop click.
+- Used by: `CreateBookingModal`, `CreateShiftModal`, `BookingDetailPanel`.
+- All three accept an `open` boolean and stay mounted so exit animations play.
 
 ---
 
 ## Booking flow (create)
 
-1. Click time in calendar → modal opens
+1. Click time in calendar → modal opens with time prefilled (15-min precision)
 2. Fill in: customer (name + phone required), car (make + model required), service, duration, status, worker, price, notes
 3. `POST /api/bookings/create` — creates customer (reuses if phone number exists) + car + booking
-4. SMS sent via GHL **only if** customer has `highlevel_contact_id` — log + `sms_confirmation_sent` flag only set on actual send
+4. SMS confirmation sent via GHL (requires `highlevel_contact_id` on the customer)
 5. Calendar reloads
 
 ---
@@ -195,17 +209,6 @@ Edit directly on the page — no hidden forms:
 3. Göran sees yellow banner on dashboard → approves ✓ or rejects ✗ with one click
 4. Worker sees their shifts with search + status filter
 5. Each shift shows linked bookings (bookings whose time falls within the shift)
-
----
-
-## Animations & UX
-
-- **Modals:** scale-in from center with spring feel
-- **Detail panel:** slide-in from right
-- **Page navigation:** fade-up on page change
-- **Sidebar hover:** slides 0.5px right
-- **Buttons:** scale(0.97) on click
-- **Hover slot in calendar:** fade-in, subtle background
 
 ---
 
@@ -262,17 +265,5 @@ npm run dev
 # → http://localhost:3000
 ```
 
-**Build:** `npm run build` — passes, 0 errors
+**Build:** `npm run build` — passes, 0 errors  
 **Lint:** `npm run lint` — passes, 0 errors, 0 warnings
-
----
-
-## Recent fixes (2026-06-05)
-
-- **Double-submit removed** — booking modal submit button was firing twice (form association + manual `requestSubmit`); now just `type="submit"`
-- **SMS false-positive fixed** — `sms_logs` insert and `sms_confirmation_sent` flag now only set when GHL actually sends (customer has `highlevel_contact_id`)
-- **Hardcoded reviewer removed** — `PendingShiftsBanner` now takes `reviewerId` prop; approve/reject buttons hidden when not provided
-- **Shifts RLS tightened** — worker update policy now requires `status = 'pending'` and adds `with check` clause; workers can't self-approve
-- **Modal extracted** — `src/components/ui/modal.tsx` with `Modal` + `SidePanel`, CSS transitions, escape key, delayed unmount
-- **`CreateBookingModal` remount keys** — all three calendar views pass `key={time.toISOString()}` so form resets correctly on each slot click
-- **Lint rule fixed** — all `useEffect(() => { fetchX() })` patterns wrapped as async IIFEs to satisfy `react-hooks/set-state-in-effect`
