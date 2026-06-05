@@ -9,6 +9,7 @@ import {
 } from 'lucide-react'
 import type { Booking, BookingStatus } from '@/types'
 import { cn } from '@/lib/utils/cn'
+import { JobPhotos } from '@/components/jobs/job-photos'
 
 const STATUS_OPTIONS: { value: BookingStatus; label: string; color: string }[] = [
   { value: 'pending',     label: 'Väntar',      color: '#C4962A' },
@@ -349,6 +350,14 @@ export default function BookingDetailPage() {
           />
         </div>
       </div>
+
+      {/* Före/efter-bilder */}
+      {booking?.assigned_worker_id && (
+        <div className="rounded border border-border bg-card p-4 space-y-4">
+          <p className="label-caps">Jobbdokumentation</p>
+          <JobPhotos bookingId={id} workerId={booking.assigned_worker_id} />
+        </div>
+      )}
 
       {/* SMS-status */}
       <div className="rounded border border-border bg-card px-4 py-3 flex items-center gap-2">

@@ -20,7 +20,7 @@ Built specifically for Göran's and the workers' daily workflow, not a generic c
 | Framework | Next.js 16.2.7 / App Router, TypeScript, `src/` structure |
 | Styling | Tailwind CSS v4 + shadcn/ui, dark theme, Swedish yellow accent (#F5C842) |
 | Database / Auth | Supabase (Postgres + Auth) — Hai's project: `vsnbaylcgcksabwradgu` |
-| Image storage | Supabase Storage |
+| Image storage | Supabase Storage (buckets: `car-before-images`, `car-after-images`) |
 | GHL integration | HighLevel API v2 |
 | SMS | GHL Conversations API (ready for 46elks swap) |
 | Font | DM Sans + DM Mono |
@@ -33,7 +33,7 @@ Built specifically for Göran's and the workers' daily workflow, not a generic c
 ```
 src/
   proxy.ts                             # Auth proxy (passthrough in dev)
-  types/index.ts                       # All types: Booking, Shift, Customer, Car, SmsLog, etc.
+  types/index.ts                       # All types: Booking, Shift, CleaningJob, ImageRecord, etc.
   lib/
     supabase/
       client.ts                        # Browser client (typed)
@@ -51,10 +51,11 @@ src/
       dashboard/page.tsx               # Overview: stats + pending shifts banner + recent bookings
       calendar/page.tsx                # Calendar — fetches data from Supabase
       bookings/page.tsx                # Bookings list (hardcoded empty — not prioritised)
-      bookings/[id]/page.tsx           # ✅ Booking detail page with full editing
+      bookings/[id]/page.tsx           # ✅ Booking detail page with full editing + job photo section
       customers/[id]/page.tsx          # ✅ Customer history: visits, cars, SMS, notes
       my-shifts/page.tsx               # ✅ My shifts: add, search, view linked bookings
-      jobs/page.tsx                    # Kanban board (hardcoded empty)
+      jobs/page.tsx                    # ✅ Kanban board — fetches live data from /api/jobs
+      admin/job-reviews/page.tsx       # ✅ Admin before/after photo review page (Göran only)
       workers/page.tsx                 # Staff list (hardcoded empty)
       settings/page.tsx                # Placeholder
     api/
@@ -66,7 +67,9 @@ src/
       customers/[id]/route.ts          # ✅ GET full customer profile, PATCH notes
       sms/send/route.ts                # POST manual SMS via GHL
       webhooks/ghl/route.ts            # POST GHL appointment/contact sync
-      jobs/[id]/images/route.ts        # POST upload image to Storage
+      jobs/route.ts                    # ✅ GET list (supports ?booking_id=), POST create job
+      jobs/[id]/route.ts               # ✅ GET single job, PATCH status/notes
+      jobs/[id]/images/route.ts        # ✅ POST upload image to Supabase Storage
   components/
     ui/
       modal.tsx                        # ✅ Reusable Modal + SidePanel with smooth CSS transitions
@@ -83,8 +86,11 @@ src/
       create-shift-modal.tsx           # ✅ Modal for worker to submit a shift
       pending-shifts-banner.tsx        # ✅ Yellow banner on dashboard — Göran approves directly
       pending-shifts-panel.tsx         # Reusable panel for pending shifts
+    jobs/
+      jobs-board.tsx                   # ✅ Kanban board component (4 columns by status)
+      job-photos.tsx                   # ✅ Before/after photo upload component for workers
     layout/
-      sidebar.tsx                      # Side menu with nav links
+      sidebar.tsx                      # Side menu — "Granskning" link visible for admin/manager
       top-bar.tsx                      # Top bar with date, avatar, logout
       providers.tsx
     auth/login-form.tsx
@@ -96,6 +102,7 @@ supabase/
   migrations/
     001_additive.sql                   # Additive: calendar_color, SMS columns, RLS fixes
     002_shifts.sql                     # ✅ Shifts table with RLS
+    003_cleaning_jobs.sql              # ✅ cleaning_jobs + job_images tables with RLS
 ```
 
 ---
@@ -109,16 +116,21 @@ supabase/
 | `cars` | Cars per customer (make, model, plate, color) |
 | `bookings` | Core booking — customer, car, worker, status, SMS flags |
 | `shifts` | Work shifts — worker_id, starts_at, ends_at, status (pending/approved/rejected) |
-| `cleaning_jobs` | Job execution — worker, status, start/complete timestamps |
-| `job_images` | Before/after images with storage path |
+| `cleaning_jobs` | Job execution — one per booking, tracks status + timestamps |
+| `job_images` | Before/after photos — job_id, storage_path, public_url, type (before/after), uploaded_by |
 | `sms_logs` | SMS log with type, provider, delivery time |
 | `activity_log` | Audit trail |
 | `highlevel_sync_logs` | Webhook log with idempotency |
 
 **Migrations to run in order:**
-1. `schema.sql` (fresh DB) or skip to step 2 if tables already exist
+1. `schema.sql` (fresh DB) or skip if tables already exist
 2. `001_additive.sql`
 3. `002_shifts.sql`
+4. `003_cleaning_jobs.sql`
+
+**Storage buckets (create manually in Supabase dashboard, set to public):**
+- `car-before-images`
+- `car-after-images`
 
 ---
 
@@ -186,7 +198,35 @@ Edit directly on the page — no hidden forms:
 - **Time, duration, service, worker, price** — editable fields
 - **Customer notes + internal notes** — clearly separated
 - **History link** → jumps to customer's full history
+- **Job documentation section** — visible when a worker is assigned (see Job photo flow below)
 - **Delete** with confirmation dialog
+
+---
+
+## Job photo flow
+
+Workers document their work directly from the booking detail page (`/bookings/[id]`).
+
+**Worker flow:**
+1. Open a booking that is assigned to them
+2. Scroll to "Jobbdokumentation" section → `JobPhotos` component renders
+3. Tap "Ta bild" (before) → phone camera opens, photo uploads to `car-before-images` bucket
+4. Complete the job → tap "Ta bild" (after) → uploads to `car-after-images` bucket
+5. Multiple photos can be added per phase
+6. Status auto-updates: `not_started` → `in_progress` (on first before-photo) → `needs_review` (on first after-photo)
+
+**Göran's review flow (`/admin/job-reviews`):**
+1. Sidebar shows "Granskning" link (only for admin/manager)
+2. Badge shows how many jobs are waiting
+3. Filter: *Waiting / All / Done*
+4. Each job card expands to show before and after photos side by side
+5. Click "Godkänn jobbet" → status changes to `completed`
+
+**Technical notes:**
+- `cleaning_jobs` has a `unique(booking_id)` constraint — one job per booking
+- Job is created lazily: first photo upload triggers `POST /api/jobs` if no job exists yet
+- Images are stored at `{jobId}/{timestamp}.{ext}` inside the bucket
+- `GET /api/jobs?booking_id=` is used by `JobPhotos` to check if a job already exists
 
 ---
 
@@ -234,7 +274,9 @@ Edit directly on the page — no hidden forms:
 | `/api/customers/[id]` | GET, PATCH | Customer profile + history |
 | `/api/sms/send` | POST | Manual SMS via GHL |
 | `/api/webhooks/ghl` | POST | GHL sync |
-| `/api/jobs/[id]/images` | POST | Image upload |
+| `/api/jobs` | GET, POST | List jobs (`?booking_id=` filter), create job |
+| `/api/jobs/[id]` | GET, PATCH | Single job — status, notes, timestamps |
+| `/api/jobs/[id]/images` | POST | Upload image to Supabase Storage |
 
 ---
 
@@ -243,6 +285,7 @@ Edit directly on the page — no hidden forms:
 | Feature | Priority |
 |---|---|
 | Auth enabled (proxy.ts is passthrough) | **Before production** |
+| Storage bucket RLS policies | **Before production** |
 | SMS via 46elks (replace GHL) | High |
 | Auto-SMS on booking create (requires highlevel_contact_id) | High |
 | Auto-SMS when car is ready | High |
@@ -260,7 +303,8 @@ Edit directly on the page — no hidden forms:
 ```bash
 npm install
 # Create .env.local with Supabase keys (see .env.local.example)
-# Run schema.sql + migrations in Supabase SQL editor
+# Run schema.sql + migrations 001–003 in Supabase SQL editor
+# Create storage buckets: car-before-images, car-after-images (public)
 npm run dev
 # → http://localhost:3000
 ```
