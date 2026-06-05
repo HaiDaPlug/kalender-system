@@ -195,6 +195,16 @@ Redigera direkt på sidan — inga dolda formulär:
 
 ---
 
+## Kalender — tekniska noter
+
+- **`HOUR_PX = 72`** i `calendar-utils.ts` — basstorlek 18px gör `h-16` (4rem) = 72px per timrad. Alla pixelberäkningar (tidslinje, slot-klick, bokningshöjd, timlinjer, scroll) använder konstanten. Hårdkoda aldrig `64`.
+- Scrollar automatiskt till aktuell tid vid laddning (dag + vecka).
+- Tidslinje i veckovyn spänner över alla 7 kolumner som ett absolut element.
+- Slot-klick använder `scrollRef.current.scrollTop` direkt — inte `.closest('.overflow-y-auto')`.
+- Supabase-nyckel heter `NEXT_PUBLIC_SUPABASE_PUBLISHABLE_KEY` (inte `ANON_KEY`).
+
+---
+
 ## GHL webhook (`/api/webhooks/ghl`)
 
 - Ed25519-signatur via `X-GHL-Signature` (`GHL_WEBHOOK_PUBLIC_KEY` = raw 32-byte base64)

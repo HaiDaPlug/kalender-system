@@ -4,6 +4,7 @@ import type { Booking, Profile } from '@/types'
 import {
   STATUS_CONFIG,
   HOURS,
+  HOUR_PX,
   MONTHS_SE,
   WEEK_DAYS_SE,
   isSameDay,
@@ -22,20 +23,20 @@ interface Props {
   onBookingCreated?: () => void
 }
 
-function calcTimePx() {
+function calcTime() {
   const now = new Date()
-  return (now.getHours() + now.getMinutes() / 60) * 64
+  const px = (now.getHours() + now.getMinutes() / 60) * HOUR_PX
+  const label = now.toLocaleTimeString('sv-SE', { hour: '2-digit', minute: '2-digit' })
+  return { px, label }
 }
 
-function useCurrentTimePx(): number {
-  const [px, setPx] = useState(calcTimePx)
-
+function useCurrentTime() {
+  const [time, setTime] = useState(calcTime)
   useEffect(() => {
-    const id = setInterval(() => setPx(calcTimePx()), 60_000)
+    const id = setInterval(() => setTime(calcTime()), 60_000)
     return () => clearInterval(id)
   }, [])
-
-  return px
+  return time
 }
 
 export function DayView({ current, bookings, workers = [], onSelectBooking, onBookingCreated }: Props) {
@@ -45,21 +46,26 @@ export function DayView({ current, bookings, workers = [], onSelectBooking, onBo
   const dayBookings = getBookingsForDay(bookings, current)
   const layouts = computeBookingLayouts(dayBookings)
   const dowIndex = current.getDay() === 0 ? 6 : current.getDay() - 1
-  const timePx = useCurrentTimePx()
+  const { px: timePx } = useCurrentTime()
   const [newBookingTime, setNewBookingTime] = useState<Date | null>(null)
   // Vilken 30-min slot musen hovrar över (i minuter från midnatt)
   const [hoverSlot, setHoverSlot] = useState<number | null>(null)
 
   function getSlotFromEvent(e: React.MouseEvent<HTMLDivElement>): number {
     const rect = (e.currentTarget as HTMLElement).getBoundingClientRect()
-    const y = e.clientY - rect.top + (e.currentTarget as HTMLElement).closest('.overflow-y-auto')!.scrollTop
-    return Math.floor(y / 64) * 60
+    const scrollTop = scrollRef.current?.scrollTop ?? 0
+    const y = e.clientY - rect.top + scrollTop
+    return Math.floor(y / HOUR_PX) * 60
   }
 
   useEffect(() => {
     if (scrollRef.current) {
-      scrollRef.current.scrollTop = 7 * 64
+      const target = isToday
+        ? timePx - scrollRef.current.clientHeight / 2
+        : 7 * HOUR_PX
+      scrollRef.current.scrollTop = Math.max(0, target)
     }
+  // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [])
 
   return (
@@ -80,9 +86,9 @@ export function DayView({ current, bookings, workers = [], onSelectBooking, onBo
 
       {/* Time grid */}
       <div ref={scrollRef} className="flex-1 overflow-y-auto min-h-0">
-        <div className="relative flex" style={{ height: `${HOURS.length * 64}px` }}>
+        <div className="relative flex" style={{ height: `${HOURS.length * HOUR_PX}px` }}>
           {/* Hour labels */}
-          <div className="w-12 shrink-0">
+          <div className="w-12 shrink-0 relative">
             {HOURS.map(h => (
               <div key={h} className="h-16 flex items-start justify-end pr-2 pt-0.5">
                 <span className="label-caps tabular">{String(h).padStart(2, '0')}:00</span>
@@ -108,17 +114,17 @@ export function DayView({ current, bookings, workers = [], onSelectBooking, onBo
           >
             {/* Hour lines */}
             {HOURS.map(h => (
-              <div key={h} className="absolute left-0 right-0 border-t border-border/50" style={{ top: `${h * 64}px` }} />
+              <div key={h} className="absolute left-0 right-0 border-t border-border/50" style={{ top: `${h * HOUR_PX}px` }} />
             ))}
             {HOURS.map(h => (
-              <div key={`h${h}`} className="absolute left-0 right-0 border-t border-border/20" style={{ top: `${h * 64 + 32}px` }} />
+              <div key={`h${h}`} className="absolute left-0 right-0 border-t border-border/20" style={{ top: `${h * HOUR_PX + HOUR_PX / 2}px` }} />
             ))}
 
             {/* Hover-slot — lyser upp med + när man rör musen över en ledig tid */}
             {hoverSlot !== null && (
               <div
                 className="absolute left-0 right-0 z-10 pointer-events-none flex items-center justify-center animate-fade-in"
-                style={{ top: `${(hoverSlot / 60) * 64}px`, height: '64px' }}
+                style={{ top: `${(hoverSlot / 60) * HOUR_PX}px`, height: `${HOUR_PX}px` }}
               >
                 <div className="absolute inset-0 bg-primary/8 border-y border-primary/15 transition-all duration-150" />
                 <span className="relative text-primary/60 text-xl font-light leading-none">+</span>
@@ -200,8 +206,8 @@ export function DayView({ current, bookings, workers = [], onSelectBooking, onBo
             {/* Current time line — updates every minute */}
             {isToday && (
               <div className="absolute left-0 right-0 z-20 pointer-events-none" style={{ top: `${timePx}px` }}>
-                <div className="flex items-center">
-                  <div className="h-2 w-2 rounded-full bg-primary ml-[-4px]" />
+                <div className="flex items-center gap-0">
+                  <div className="h-2 w-2 rounded-full bg-primary shrink-0 ml-[-4px]" />
                   <div className="flex-1 h-px bg-primary" />
                 </div>
               </div>

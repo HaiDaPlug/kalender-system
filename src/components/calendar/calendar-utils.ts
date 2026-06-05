@@ -11,6 +11,8 @@ export const STATUS_CONFIG = {
 } as const
 
 export const HOURS = Array.from({ length: 24 }, (_, i) => i)
+// h-16 in Tailwind = 4rem. Base font is 18px → 4 × 18 = 72px per hour row.
+export const HOUR_PX = 72
 export const WEEK_DAYS_SE = ['Mån', 'Tis', 'Ons', 'Tor', 'Fre', 'Lör', 'Sön']
 export const MONTHS_SE = [
   'Januari', 'Februari', 'Mars', 'April', 'Maj', 'Juni',
@@ -19,11 +21,11 @@ export const MONTHS_SE = [
 
 export function getBookingTop(scheduled_at: string): number {
   const d = new Date(scheduled_at)
-  return (d.getHours() + d.getMinutes() / 60) * 64
+  return (d.getHours() + d.getMinutes() / 60) * HOUR_PX
 }
 
 export function getBookingHeight(duration_minutes: number): number {
-  return Math.max((duration_minutes / 60) * 64, 28)
+  return Math.max((duration_minutes / 60) * HOUR_PX, 28)
 }
 
 export function isSameDay(a: Date, b: Date) {

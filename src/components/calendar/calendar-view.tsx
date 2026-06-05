@@ -91,7 +91,7 @@ export function CalendarView({ bookings, workers = [] }: Props) {
   }
 
   return (
-    <div className="relative flex flex-col h-full rounded border border-border bg-card overflow-hidden">
+    <div className="relative flex flex-col flex-1 min-h-0 rounded border border-border bg-card overflow-hidden">
       {/* Toolbar */}
       <div className="flex items-center gap-3 px-4 py-3 border-b border-border shrink-0 flex-wrap gap-y-2">
         {/* Today button */}
@@ -201,7 +201,7 @@ export function CalendarView({ bookings, workers = [] }: Props) {
       </div>
 
       {/* Calendar body */}
-      <div className="flex-1 min-h-0 relative">
+      <div className="flex flex-col flex-1 min-h-0 relative">
         {view === 'månad' && (
           <MonthView
             current={current}

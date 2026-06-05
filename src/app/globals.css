@@ -55,7 +55,7 @@
   --secondary: #1C1C20;
   --secondary-foreground: #F0EDE8;
   --muted: #1C1C20;
-  --muted-foreground: #6B6870;
+  --muted-foreground: #A8A5B0;
   --accent: #1C1C20;
   --accent-foreground: #F0EDE8;
   --destructive: #E05252;
@@ -101,6 +101,7 @@
   }
   html {
     @apply font-sans;
+    font-size: 18px;
   }
 
   /* Scrollbar */

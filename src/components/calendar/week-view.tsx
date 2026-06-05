@@ -5,6 +5,7 @@ import {
   STATUS_CONFIG,
   HOURS,
   WEEK_DAYS_SE,
+  HOUR_PX,
   isSameDay,
   startOfWeek,
   addDays,
@@ -25,20 +26,20 @@ interface Props {
   onBookingCreated?: () => void
 }
 
-function calcTimePx() {
+function calcTime() {
   const now = new Date()
-  return (now.getHours() + now.getMinutes() / 60) * 64
+  const px = (now.getHours() + now.getMinutes() / 60) * HOUR_PX
+  const label = now.toLocaleTimeString('sv-SE', { hour: '2-digit', minute: '2-digit' })
+  return { px, label }
 }
 
-function useCurrentTimePx(): number {
-  const [px, setPx] = useState(calcTimePx)
-
+function useCurrentTime() {
+  const [time, setTime] = useState(calcTime)
   useEffect(() => {
-    const id = setInterval(() => setPx(calcTimePx()), 60_000)
+    const id = setInterval(() => setTime(calcTime()), 60_000)
     return () => clearInterval(id)
   }, [])
-
-  return px
+  return time
 }
 
 export function WeekView({ current, bookings, workers = [], onSelectBooking, onBookingCreated }: Props) {
@@ -47,16 +48,16 @@ export function WeekView({ current, bookings, workers = [], onSelectBooking, onB
   const weekStart = startOfWeek(current)
   const weekDays = Array.from({ length: 7 }, (_, i) => addDays(weekStart, i))
   const weekNum = getWeekNumber(current)
-  const timePx = useCurrentTimePx()
+  const { px: timePx } = useCurrentTime()
   const [newBookingTime, setNewBookingTime] = useState<Date | null>(null)
   // Vilken kolumn + slot musen hovrar över
   const [hoverInfo, setHoverInfo] = useState<{ dayIndex: number; slot: number } | null>(null)
 
   function getSlotFromEvent(e: React.MouseEvent<HTMLDivElement>): number {
     const rect = (e.currentTarget as HTMLElement).getBoundingClientRect()
-    const scrollTop = (e.currentTarget as HTMLElement).closest('.overflow-y-auto')!.scrollTop
+    const scrollTop = scrollRef.current?.scrollTop ?? 0
     const y = e.clientY - rect.top + scrollTop
-    return Math.floor(y / 64) * 60
+    return Math.floor(y / HOUR_PX) * 60
   }
 
   function handleColumnClick(e: React.MouseEvent<HTMLDivElement>, day: Date) {
@@ -69,8 +70,13 @@ export function WeekView({ current, bookings, workers = [], onSelectBooking, onB
 
   useEffect(() => {
     if (scrollRef.current) {
-      scrollRef.current.scrollTop = 7 * 64
+      const todayInView = weekDays.some(d => isSameDay(d, today))
+      const target = todayInView
+        ? timePx - scrollRef.current.clientHeight / 2
+        : 7 * HOUR_PX
+      scrollRef.current.scrollTop = Math.max(0, target)
     }
+  // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [])
 
   return (
@@ -100,7 +106,7 @@ export function WeekView({ current, bookings, workers = [], onSelectBooking, onB
       <div ref={scrollRef} className="flex-1 overflow-y-auto min-h-0">
         <div className="relative" style={{ gridTemplateColumns: '48px repeat(7, 1fr)', display: 'grid' }}>
           {/* Hour labels */}
-          <div className="col-start-1">
+          <div className="col-start-1 relative">
             {HOURS.map(h => (
               <div key={h} className="h-16 flex items-start justify-end pr-2 pt-0.5">
                 <span className="label-caps tabular">{String(h).padStart(2, '0')}:00</span>
@@ -127,14 +133,14 @@ export function WeekView({ current, bookings, workers = [], onSelectBooking, onB
                   'relative border-l border-border cursor-pointer',
                   isToday && 'bg-primary/3'
                 )}
-                style={{ height: `${HOURS.length * 64}px` }}
+                style={{ height: `${HOURS.length * HOUR_PX}px` }}
               >
                 {/* Hour lines */}
                 {HOURS.map(h => (
                   <div
                     key={h}
                     className="absolute left-0 right-0 border-t border-border/50"
-                    style={{ top: `${h * 64}px` }}
+                    style={{ top: `${h * HOUR_PX}px` }}
                   />
                 ))}
 
@@ -143,7 +149,7 @@ export function WeekView({ current, bookings, workers = [], onSelectBooking, onB
                   <div
                     key={`h${h}`}
                     className="absolute left-0 right-0 border-t border-border/20"
-                    style={{ top: `${h * 64 + 32}px` }}
+                    style={{ top: `${h * HOUR_PX + HOUR_PX / 2}px` }}
                   />
                 ))}
 
@@ -151,7 +157,7 @@ export function WeekView({ current, bookings, workers = [], onSelectBooking, onB
                 {hoverInfo?.dayIndex === di && (
                   <div
                     className="absolute left-0 right-0 z-10 pointer-events-none flex items-center justify-center animate-fade-in"
-                    style={{ top: `${(hoverInfo.slot / 60) * 64}px`, height: '64px' }}
+                    style={{ top: `${(hoverInfo.slot / 60) * HOUR_PX}px`, height: `${HOUR_PX}px` }}
                   >
                     <div className="absolute inset-0 bg-primary/8 border-y border-primary/15 transition-all duration-150" />
                     <span className="relative text-primary/60 text-xl font-light leading-none">+</span>
@@ -216,18 +222,20 @@ export function WeekView({ current, bookings, workers = [], onSelectBooking, onB
                   )
                 })}
 
-                {/* Current time line — updates every minute */}
-                {isToday && (
-                  <div className="absolute left-0 right-0 z-20 pointer-events-none" style={{ top: `${timePx}px` }}>
-                    <div className="flex items-center">
-                      <div className="h-2 w-2 rounded-full bg-primary ml-[-4px]" />
-                      <div className="flex-1 h-px bg-primary" />
-                    </div>
-                  </div>
-                )}
               </div>
             )
           })}
+
+          {/* Current time line — spans all 7 day columns, updates every minute */}
+          <div
+            className="absolute left-0 right-0 z-20 pointer-events-none"
+            style={{ top: `${timePx}px`, paddingLeft: '48px' }}
+          >
+            <div className="flex items-center">
+              <div className="h-2 w-2 rounded-full bg-primary shrink-0 ml-[-4px]" />
+              <div className="flex-1 h-px bg-primary" />
+            </div>
+          </div>
         </div>
       </div>
 
