@@ -11,15 +11,17 @@ import {
   Users,
   Briefcase,
   Settings,
+  CalendarClock,
 } from 'lucide-react'
 
 const NAV = [
-  { href: '/dashboard', label: 'Översikt', icon: LayoutDashboard },
-  { href: '/calendar', label: 'Kalender', icon: CalendarDays },
-  { href: '/bookings', label: 'Bokningar', icon: BookOpen },
-  { href: '/jobs', label: 'Jobb', icon: Briefcase },
-  { href: '/workers', label: 'Personal', icon: Users, adminOnly: true },
-  { href: '/settings', label: 'Inställningar', icon: Settings },
+  { href: '/dashboard',  label: 'Översikt',   icon: LayoutDashboard },
+  { href: '/calendar',   label: 'Kalender',   icon: CalendarDays },
+  { href: '/bookings',   label: 'Bokningar',  icon: BookOpen },
+  { href: '/my-shifts',  label: 'Mina pass',  icon: CalendarClock },
+  { href: '/jobs',       label: 'Jobb',       icon: Briefcase },
+  { href: '/workers',    label: 'Personal',   icon: Users, adminOnly: true },
+  { href: '/settings',   label: 'Inställningar', icon: Settings },
 ]
 
 const ROLE_LABELS: Record<string, string> = {

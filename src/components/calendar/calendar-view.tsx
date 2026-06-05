@@ -1,8 +1,9 @@
 'use client'
 
-import { useState, useMemo } from 'react'
+import { useState, useMemo, useCallback } from 'react'
 import type { Booking, BookingStatus, Profile } from '@/types'
-import { ChevronLeft, ChevronRight, CalendarDays } from 'lucide-react'
+import { ChevronLeft, ChevronRight, CalendarDays, Plus } from 'lucide-react'
+import { CreateBookingModal } from './create-booking-modal'
 import { cn } from '@/lib/utils/cn'
 import type { CalendarView } from './calendar-utils'
 import {
@@ -37,6 +38,13 @@ export function CalendarView({ bookings, workers = [] }: Props) {
   const [selectedBooking, setSelectedBooking] = useState<Booking | null>(null)
   const [workerFilter, setWorkerFilter] = useState<string>('all')
   const [statusFilter, setStatusFilter] = useState<BookingStatus | 'all'>('all')
+  const [showCreateModal, setShowCreateModal] = useState(false)
+  const [createModalTime, setCreateModalTime] = useState<Date>(new Date())
+
+  // Uppdaterar bokningslistan efter ny bokning skapats — laddar om sidan
+  const handleBookingCreated = useCallback(() => {
+    window.location.reload()
+  }, [])
 
   // Navigation
   const navigate = (dir: -1 | 1) => {
@@ -142,6 +150,15 @@ export function CalendarView({ bookings, workers = [] }: Props) {
           </select>
         )}
 
+        {/* Ny bokning */}
+        <button
+          onClick={() => { setCreateModalTime(new Date()); setShowCreateModal(true) }}
+          className="flex items-center gap-1.5 px-2.5 py-1.5 rounded bg-primary text-primary-foreground text-xs font-medium hover:opacity-90 transition-opacity"
+        >
+          <Plus className="h-3.5 w-3.5" />
+          Ny bokning
+        </button>
+
         {/* View switcher */}
         <div className="flex rounded border border-border overflow-hidden">
           {VIEWS.map(v => (
@@ -197,14 +214,18 @@ export function CalendarView({ bookings, workers = [] }: Props) {
           <WeekView
             current={current}
             bookings={filtered}
+            workers={workers}
             onSelectBooking={setSelectedBooking}
+            onBookingCreated={handleBookingCreated}
           />
         )}
         {view === 'dag' && (
           <DayView
             current={current}
             bookings={filtered}
+            workers={workers}
             onSelectBooking={setSelectedBooking}
+            onBookingCreated={handleBookingCreated}
           />
         )}
 
@@ -216,6 +237,16 @@ export function CalendarView({ bookings, workers = [] }: Props) {
           />
         )}
       </div>
+
+      {/* Modal för ny bokning via toolbar-knappen */}
+      {showCreateModal && (
+        <CreateBookingModal
+          initialDate={createModalTime}
+          workers={workers}
+          onClose={() => setShowCreateModal(false)}
+          onCreated={handleBookingCreated}
+        />
+      )}
     </div>
   )
 }

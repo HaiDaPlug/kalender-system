@@ -1,5 +1,5 @@
 # RenGör — Current State
-_Last updated: 2026-06-04 (webhook hardening)_
+_Last updated: 2026-06-05 (arbetspass-system)_
 
 ---
 
@@ -154,13 +154,45 @@ Full Google Calendar-like experience, Swedish UI, three views:
 
 ---
 
+## Arbetspass-system (2026-06-05)
+
+Anställda kan lägga in pass, Göran godkänner dem.
+
+**Ny migration:** `supabase/migrations/002_shifts.sql` — kör i Supabase SQL editor efter 001.
+
+**Nya filer:**
+- `src/types/index.ts` — `Shift`, `ShiftStatus` tillagda
+- `src/app/api/shifts/route.ts` — GET (filtrera på worker, status, datum) + POST (skapa pass)
+- `src/app/api/shifts/approve/route.ts` — POST godkänn/avvisa (kräver admin/manager-roll)
+- `src/components/shifts/create-shift-modal.tsx` — modal för att lägga in pass, skickas med status=pending
+- `src/components/shifts/pending-shifts-banner.tsx` — banner på dashboard, Göran godkänner direkt
+- `src/components/shifts/pending-shifts-panel.tsx` — återanvändbar panel (admin ser alla, worker ser sina)
+- `src/app/(dashboard)/my-shifts/page.tsx` — "Mina pass" — sök, filtrera status, se kopplade bokningar + kommentarer
+
+**Flöde:**
+1. Anställd klickar "Lägg in pass" (sidomeny: Mina pass) → fyller i starttid, sluttid, ev. kommentar
+2. Pass skapas med status=pending och syns direkt i "Mina pass"
+3. Göran ser gul banner på dashboard → godkänner eller avvisar med ett klick
+4. Kommentarer och önskemål på bokningar visas tydligt (blå badge) under kopplade pass
+
+## Skapa bokning-flöde (2026-06-05)
+
+Göran och tekniker kan nu skapa bokningar direkt i kalendern:
+
+- **Klick på tom tid** i dag- eller veckovyn öppnar modal med tiden förifylld
+- **"Ny bokning"-knapp** i toolbar öppnar samma modal med nuvarande tid
+- **Modalen** (`create-booking-modal.tsx`) samlar: kund (namn, telefon, email), bil (märke, modell, regnr, färg), tjänst, längd, tekniker, pris, anteckningar
+- **API** (`/api/bookings/create`) skapar kund (återanvänder vid samma telefonnummer) + bil + bokning i sekvens
+- **SMS-bekräftelse** skickas automatiskt via GHL efter skapande; fel i SMS stoppar inte bokningen
+- Dubbelbokningar tillåtna — ingen blockering i API:t
+- Kalendern uppdateras via `window.location.reload()` efter skapande
+
 ## What is NOT built yet
 
 | Feature | Priority |
 |---|---|
 | Booking detail page (`/bookings/[id]`) | High — "Öppna bokning" links here but page is 404 |
-| Create booking form | High |
-| Auto-SMS on booking create (confirmation) | High |
+| Auto-SMS on booking create (confirmation) | High — GHL-integration klar men kräver highlevel_contact_id på kunden |
 | Auto-SMS on job complete (ready for pickup) | High |
 | 46elks SMS provider — decision pending | Medium |
 | Worker views (`/my-cars`, `/my-cars/today`) | High |

@@ -1,6 +1,6 @@
 'use client'
 
-import type { Booking } from '@/types'
+import type { Booking, Profile } from '@/types'
 import {
   STATUS_CONFIG,
   HOURS,
@@ -12,11 +12,14 @@ import {
   computeBookingLayouts,
 } from './calendar-utils'
 import { useRef, useEffect, useState } from 'react'
+import { CreateBookingModal } from './create-booking-modal'
 
 interface Props {
   current: Date
   bookings: Booking[]
+  workers?: Profile[]
   onSelectBooking: (b: Booking) => void
+  onBookingCreated?: () => void
 }
 
 function calcTimePx() {
@@ -35,7 +38,7 @@ function useCurrentTimePx(): number {
   return px
 }
 
-export function DayView({ current, bookings, onSelectBooking }: Props) {
+export function DayView({ current, bookings, workers = [], onSelectBooking, onBookingCreated }: Props) {
   const scrollRef = useRef<HTMLDivElement>(null)
   const today = new Date()
   const isToday = isSameDay(current, today)
@@ -43,6 +46,15 @@ export function DayView({ current, bookings, onSelectBooking }: Props) {
   const layouts = computeBookingLayouts(dayBookings)
   const dowIndex = current.getDay() === 0 ? 6 : current.getDay() - 1
   const timePx = useCurrentTimePx()
+  const [newBookingTime, setNewBookingTime] = useState<Date | null>(null)
+  // Vilken 30-min slot musen hovrar över (i minuter från midnatt)
+  const [hoverSlot, setHoverSlot] = useState<number | null>(null)
+
+  function getSlotFromEvent(e: React.MouseEvent<HTMLDivElement>): number {
+    const rect = (e.currentTarget as HTMLElement).getBoundingClientRect()
+    const y = e.clientY - rect.top + (e.currentTarget as HTMLElement).closest('.overflow-y-auto')!.scrollTop
+    return Math.floor(y / 64) * 60
+  }
 
   useEffect(() => {
     if (scrollRef.current) {
@@ -79,7 +91,21 @@ export function DayView({ current, bookings, onSelectBooking }: Props) {
           </div>
 
           {/* Events column */}
-          <div className="flex-1 relative border-l border-border">
+          <div
+            className="flex-1 relative border-l border-border cursor-pointer"
+            onMouseMove={e => {
+              if ((e.target as HTMLElement).closest('[role="button"]')) { setHoverSlot(null); return }
+              setHoverSlot(getSlotFromEvent(e))
+            }}
+            onMouseLeave={() => setHoverSlot(null)}
+            onClick={e => {
+              if ((e.target as HTMLElement).closest('[role="button"]')) return
+              const slot = getSlotFromEvent(e)
+              const d = new Date(current)
+              d.setHours(Math.floor(slot / 60), slot % 60, 0, 0)
+              setNewBookingTime(d)
+            }}
+          >
             {/* Hour lines */}
             {HOURS.map(h => (
               <div key={h} className="absolute left-0 right-0 border-t border-border/50" style={{ top: `${h * 64}px` }} />
@@ -87,6 +113,17 @@ export function DayView({ current, bookings, onSelectBooking }: Props) {
             {HOURS.map(h => (
               <div key={`h${h}`} className="absolute left-0 right-0 border-t border-border/20" style={{ top: `${h * 64 + 32}px` }} />
             ))}
+
+            {/* Hover-slot — lyser upp med + när man rör musen över en ledig tid */}
+            {hoverSlot !== null && (
+              <div
+                className="absolute left-0 right-0 z-10 pointer-events-none flex items-center justify-center"
+                style={{ top: `${(hoverSlot / 60) * 64}px`, height: '64px' }}
+              >
+                <div className="absolute inset-0 bg-primary/10 border-y border-primary/20" />
+                <span className="relative text-primary/70 text-lg font-light leading-none">+</span>
+              </div>
+            )}
 
             {/* Bookings — lane-positioned to avoid overlap */}
             {layouts.map(({ booking: b, top, height, lane, totalLanes }) => {
@@ -172,6 +209,18 @@ export function DayView({ current, bookings, onSelectBooking }: Props) {
           </div>
         </div>
       </div>
+
+      {newBookingTime && (
+        <CreateBookingModal
+          initialDate={newBookingTime}
+          workers={workers}
+          onClose={() => setNewBookingTime(null)}
+          onCreated={() => {
+            setNewBookingTime(null)
+            onBookingCreated?.()
+          }}
+        />
+      )}
     </div>
   )
 }

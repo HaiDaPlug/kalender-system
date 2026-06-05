@@ -1,6 +1,6 @@
 'use client'
 
-import type { Booking } from '@/types'
+import type { Booking, Profile } from '@/types'
 import {
   STATUS_CONFIG,
   HOURS,
@@ -15,11 +15,14 @@ import {
 } from './calendar-utils'
 import { cn } from '@/lib/utils/cn'
 import { useRef, useEffect, useState } from 'react'
+import { CreateBookingModal } from './create-booking-modal'
 
 interface Props {
   current: Date
   bookings: Booking[]
+  workers?: Profile[]
   onSelectBooking: (b: Booking) => void
+  onBookingCreated?: () => void
 }
 
 function calcTimePx() {
@@ -38,13 +41,31 @@ function useCurrentTimePx(): number {
   return px
 }
 
-export function WeekView({ current, bookings, onSelectBooking }: Props) {
+export function WeekView({ current, bookings, workers = [], onSelectBooking, onBookingCreated }: Props) {
   const scrollRef = useRef<HTMLDivElement>(null)
   const today = new Date()
   const weekStart = startOfWeek(current)
   const weekDays = Array.from({ length: 7 }, (_, i) => addDays(weekStart, i))
   const weekNum = getWeekNumber(current)
   const timePx = useCurrentTimePx()
+  const [newBookingTime, setNewBookingTime] = useState<Date | null>(null)
+  // Vilken kolumn + slot musen hovrar över
+  const [hoverInfo, setHoverInfo] = useState<{ dayIndex: number; slot: number } | null>(null)
+
+  function getSlotFromEvent(e: React.MouseEvent<HTMLDivElement>): number {
+    const rect = (e.currentTarget as HTMLElement).getBoundingClientRect()
+    const scrollTop = (e.currentTarget as HTMLElement).closest('.overflow-y-auto')!.scrollTop
+    const y = e.clientY - rect.top + scrollTop
+    return Math.floor(y / 64) * 60
+  }
+
+  function handleColumnClick(e: React.MouseEvent<HTMLDivElement>, day: Date) {
+    if ((e.target as HTMLElement).closest('[role="button"]')) return
+    const slot = getSlotFromEvent(e)
+    const d = new Date(day)
+    d.setHours(Math.floor(slot / 60), slot % 60, 0, 0)
+    setNewBookingTime(d)
+  }
 
   useEffect(() => {
     if (scrollRef.current) {
@@ -96,8 +117,14 @@ export function WeekView({ current, bookings, onSelectBooking }: Props) {
             return (
               <div
                 key={di}
+                onClick={e => handleColumnClick(e, day)}
+                onMouseMove={e => {
+                  if ((e.target as HTMLElement).closest('[role="button"]')) { setHoverInfo(null); return }
+                  setHoverInfo({ dayIndex: di, slot: getSlotFromEvent(e) })
+                }}
+                onMouseLeave={() => setHoverInfo(null)}
                 className={cn(
-                  'relative border-l border-border',
+                  'relative border-l border-border cursor-pointer',
                   isToday && 'bg-primary/3'
                 )}
                 style={{ height: `${HOURS.length * 64}px` }}
@@ -119,6 +146,17 @@ export function WeekView({ current, bookings, onSelectBooking }: Props) {
                     style={{ top: `${h * 64 + 32}px` }}
                   />
                 ))}
+
+                {/* Hover-slot — lyser upp med + när man rör musen */}
+                {hoverInfo?.dayIndex === di && (
+                  <div
+                    className="absolute left-0 right-0 z-10 pointer-events-none flex items-center justify-center"
+                    style={{ top: `${(hoverInfo.slot / 60) * 64}px`, height: '64px' }}
+                  >
+                    <div className="absolute inset-0 bg-primary/10 border-y border-primary/20" />
+                    <span className="relative text-primary/70 text-lg font-light leading-none">+</span>
+                  </div>
+                )}
 
                 {/* Bookings — lane-positioned */}
                 {layouts.map(({ booking: b, top, height, lane, totalLanes }) => {
@@ -192,6 +230,18 @@ export function WeekView({ current, bookings, onSelectBooking }: Props) {
           })}
         </div>
       </div>
+
+      {newBookingTime && (
+        <CreateBookingModal
+          initialDate={newBookingTime}
+          workers={workers}
+          onClose={() => setNewBookingTime(null)}
+          onCreated={() => {
+            setNewBookingTime(null)
+            onBookingCreated?.()
+          }}
+        />
+      )}
     </div>
   )
 }

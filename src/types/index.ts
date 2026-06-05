@@ -144,6 +144,23 @@ export interface HighLevelSyncLog {
   created_at: string
 }
 
+export type ShiftStatus = 'pending' | 'approved' | 'rejected'
+
+export interface Shift {
+  id: string
+  worker_id: string
+  status: ShiftStatus
+  starts_at: string
+  ends_at: string
+  notes?: string
+  reviewed_by?: string
+  reviewed_at?: string
+  created_at: string
+  updated_at: string
+  worker?: Profile
+  reviewed_by_profile?: Profile
+}
+
 export interface CalendarEvent {
   id: string
   booking_id: string
