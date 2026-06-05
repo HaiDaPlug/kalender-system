@@ -24,7 +24,7 @@ export function BookingDetailPanel({ booking, onClose }: Props) {
       />
 
       {/* Panel */}
-      <div className="absolute right-0 top-0 bottom-0 w-80 z-40 bg-card border-l border-border flex flex-col shadow-2xl animate-fade-up">
+      <div className="absolute right-0 top-0 bottom-0 w-80 z-40 bg-card border-l border-border flex flex-col shadow-2xl animate-slide-right">
         {/* Header */}
         <div className="flex items-center justify-between px-4 py-3 border-b border-border">
           <div className="flex items-center gap-2">

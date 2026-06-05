@@ -84,7 +84,17 @@
 @layer base {
   * {
     @apply border-border outline-ring/50;
+    /* Mjuk transition på alla interaktiva element globalt */
+    transition-property: color, background-color, border-color, opacity, box-shadow, transform;
+    transition-duration: 150ms;
+    transition-timing-function: cubic-bezier(0.4, 0, 0.2, 1);
   }
+
+  /* Inaktivera transition på element som inte ska ha det */
+  *, *::before, *::after {
+    transition-property: color, background-color, border-color, opacity, box-shadow, transform;
+  }
+
   body {
     @apply bg-background text-foreground;
     font-feature-settings: "ss01", "ss02", "cv01";
@@ -108,6 +118,13 @@
   ::-webkit-scrollbar-thumb:hover {
     background: #3A3A42;
   }
+
+  /* Mjukare focus-ring */
+  :focus-visible {
+    outline: 2px solid var(--primary);
+    outline-offset: 2px;
+    border-radius: 4px;
+  }
 }
 
 /* Tabular numbers everywhere */
@@ -125,18 +142,47 @@
   }
 }
 
-/* Entrance animation */
+/* ── Animationer ────────────────────────────────────────────────────────── */
+
 @keyframes fade-up {
-  from {
-    opacity: 0;
-    transform: translateY(6px);
-  }
-  to {
-    opacity: 1;
-    transform: translateY(0);
-  }
+  from { opacity: 0; transform: translateY(8px); }
+  to   { opacity: 1; transform: translateY(0); }
+}
+@keyframes fade-in {
+  from { opacity: 0; }
+  to   { opacity: 1; }
+}
+@keyframes scale-in {
+  from { opacity: 0; transform: scale(0.96) translateY(4px); }
+  to   { opacity: 1; transform: scale(1) translateY(0); }
+}
+@keyframes slide-in-right {
+  from { opacity: 0; transform: translateX(16px); }
+  to   { opacity: 1; transform: translateX(0); }
+}
+@keyframes slide-in-left {
+  from { opacity: 0; transform: translateX(-8px); }
+  to   { opacity: 1; transform: translateX(0); }
+}
+@keyframes overlay-in {
+  from { opacity: 0; }
+  to   { opacity: 1; }
 }
 
-.animate-fade-up {
-  animation: fade-up 0.3s ease both;
+.animate-fade-up      { animation: fade-up       0.25s cubic-bezier(0.16, 1, 0.3, 1) both; }
+.animate-fade-in      { animation: fade-in        0.2s  ease both; }
+.animate-scale-in     { animation: scale-in       0.22s cubic-bezier(0.16, 1, 0.3, 1) both; }
+.animate-slide-right  { animation: slide-in-right 0.22s cubic-bezier(0.16, 1, 0.3, 1) both; }
+.animate-slide-left   { animation: slide-in-left  0.18s cubic-bezier(0.16, 1, 0.3, 1) both; }
+.animate-overlay      { animation: overlay-in     0.2s  ease both; }
+
+/* Sidinnehåll — tonas in vid navigation */
+.page-enter {
+  animation: fade-up 0.2s cubic-bezier(0.16, 1, 0.3, 1) both;
+}
+
+/* Knappar — liten scale på klick */
+button:not(:disabled):active,
+a:active {
+  transform: scale(0.97);
 }

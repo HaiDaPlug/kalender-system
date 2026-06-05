@@ -35,7 +35,9 @@ export default async function DashboardLayout({ children }: { children: React.Re
       <div className="flex flex-col flex-1 overflow-hidden">
         <TopBar profile={profile} />
         <main className="flex-1 overflow-y-auto p-6 bg-muted/20">
-          {children}
+          <div className="page-enter h-full">
+            {children}
+          </div>
         </main>
       </div>
     </div>

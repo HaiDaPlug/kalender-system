@@ -62,10 +62,10 @@ export function Sidebar({ profile }: { profile: Profile | null }) {
             key={href}
             href={href}
             className={cn(
-              'group flex items-center gap-3 rounded px-3 py-2 text-sm transition-all duration-150',
+              'group flex items-center gap-3 rounded px-3 py-2 text-sm transition-all duration-200',
               isActive(href)
-                ? 'bg-primary text-primary-foreground font-medium'
-                : 'text-muted-foreground hover:text-foreground hover:bg-secondary'
+                ? 'bg-primary text-primary-foreground font-medium shadow-sm'
+                : 'text-muted-foreground hover:text-foreground hover:bg-secondary hover:translate-x-0.5'
             )}
           >
             <Icon

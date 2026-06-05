@@ -46,7 +46,7 @@ export function PendingShiftsBanner() {
   if (shifts.length === 0) return null
 
   return (
-    <div className="rounded border border-amber-400/30 bg-amber-400/5 overflow-hidden">
+    <div className="rounded border border-amber-400/30 bg-amber-400/5 overflow-hidden animate-fade-up">
       <div className="flex items-center gap-2 px-4 py-2.5 border-b border-amber-400/20">
         <Clock className="h-4 w-4 text-amber-400" />
         <span className="text-sm font-semibold text-amber-400">

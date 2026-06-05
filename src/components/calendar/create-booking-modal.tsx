@@ -98,8 +98,8 @@ export function CreateBookingModal({ initialDate, workers, onClose, onCreated }:
 
   return (
     // Overlay
-    <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/50 backdrop-blur-sm">
-      <div className="w-full max-w-lg bg-card border border-border rounded-lg shadow-xl flex flex-col max-h-[90vh]">
+    <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/50 backdrop-blur-sm animate-overlay">
+      <div className="w-full max-w-lg bg-card border border-border rounded-lg shadow-xl flex flex-col max-h-[90vh] animate-scale-in">
         {/* Header */}
         <div className="flex items-center justify-between px-5 py-4 border-b border-border shrink-0">
           <h2 className="text-sm font-semibold">Ny bokning</h2>

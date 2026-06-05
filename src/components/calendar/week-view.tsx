@@ -150,11 +150,11 @@ export function WeekView({ current, bookings, workers = [], onSelectBooking, onB
                 {/* Hover-slot — lyser upp med + när man rör musen */}
                 {hoverInfo?.dayIndex === di && (
                   <div
-                    className="absolute left-0 right-0 z-10 pointer-events-none flex items-center justify-center"
+                    className="absolute left-0 right-0 z-10 pointer-events-none flex items-center justify-center animate-fade-in"
                     style={{ top: `${(hoverInfo.slot / 60) * 64}px`, height: '64px' }}
                   >
-                    <div className="absolute inset-0 bg-primary/10 border-y border-primary/20" />
-                    <span className="relative text-primary/70 text-lg font-light leading-none">+</span>
+                    <div className="absolute inset-0 bg-primary/8 border-y border-primary/15 transition-all duration-150" />
+                    <span className="relative text-primary/60 text-xl font-light leading-none">+</span>
                   </div>
                 )}
 
