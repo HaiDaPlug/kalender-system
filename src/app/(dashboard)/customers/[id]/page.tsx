@@ -3,7 +3,7 @@
 import { useState, useEffect, useCallback } from 'react'
 import { useParams, useRouter } from 'next/navigation'
 import {
-  ArrowLeft, Phone, Mail, Car, CalendarDays,
+  ArrowLeft, Phone, Mail, Car,
   MessageSquare, Loader2, Save, CheckCircle2,
   Clock, TrendingUp, Hash
 } from 'lucide-react'
@@ -62,7 +62,7 @@ export default function CustomerHistoryPage() {
     setLoading(false)
   }, [id])
 
-  useEffect(() => { fetchData() }, [fetchData])
+  useEffect(() => { (async () => { await fetchData() })() }, [fetchData])
 
   async function handleSaveNotes() {
     setSaving(true)

@@ -122,26 +122,25 @@ export async function POST(request: NextRequest) {
         locationId: process.env.GHL_LOCATION_ID,
         message,
       })
+
+      await supabase.from('sms_logs').insert({
+        booking_id: booking.id,
+        customer_id: customerId,
+        phone_number: customerPhone,
+        message_body: message,
+        sms_type: 'confirmation',
+        status: 'sent',
+        provider: 'highlevel',
+        sent_at: new Date().toISOString(),
+      })
+
+      await supabase
+        .from('bookings')
+        .update({ sms_confirmation_sent: true })
+        .eq('id', booking.id)
+
+      smsSent = true
     }
-
-    // Logga SMS oavsett om GHL-kontakt finns
-    await supabase.from('sms_logs').insert({
-      booking_id: booking.id,
-      customer_id: customerId,
-      phone_number: customerPhone,
-      message_body: message,
-      sms_type: 'confirmation',
-      status: 'sent',
-      provider: 'highlevel',
-      sent_at: new Date().toISOString(),
-    })
-
-    await supabase
-      .from('bookings')
-      .update({ sms_confirmation_sent: true })
-      .eq('id', booking.id)
-
-    smsSent = true
   } catch {
     // SMS-fel stoppar inte bokningen — logga tyst
   }

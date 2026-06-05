@@ -230,23 +230,21 @@ export function CalendarView({ bookings, workers = [] }: Props) {
         )}
 
         {/* Detail panel */}
-        {selectedBooking && (
-          <BookingDetailPanel
-            booking={selectedBooking}
-            onClose={() => setSelectedBooking(null)}
-          />
-        )}
+        <BookingDetailPanel
+          booking={selectedBooking}
+          onClose={() => setSelectedBooking(null)}
+        />
       </div>
 
       {/* Modal för ny bokning via toolbar-knappen */}
-      {showCreateModal && (
-        <CreateBookingModal
-          initialDate={createModalTime}
-          workers={workers}
-          onClose={() => setShowCreateModal(false)}
-          onCreated={handleBookingCreated}
-        />
-      )}
+      <CreateBookingModal
+        key={createModalTime.toISOString()}
+        open={showCreateModal}
+        initialDate={createModalTime}
+        workers={workers}
+        onClose={() => setShowCreateModal(false)}
+        onCreated={handleBookingCreated}
+      />
     </div>
   )
 }

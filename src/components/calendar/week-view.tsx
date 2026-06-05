@@ -54,10 +54,13 @@ export function WeekView({ current, bookings, workers = [], onSelectBooking, onB
   const [hoverInfo, setHoverInfo] = useState<{ dayIndex: number; slot: number } | null>(null)
 
   function getSlotFromEvent(e: React.MouseEvent<HTMLDivElement>): number {
-    const rect = (e.currentTarget as HTMLElement).getBoundingClientRect()
-    const scrollTop = scrollRef.current?.scrollTop ?? 0
-    const y = e.clientY - rect.top + scrollTop
-    return Math.floor(y / HOUR_PX) * 60
+    const scrollEl = scrollRef.current
+    if (!scrollEl) return 0
+    const rect = scrollEl.getBoundingClientRect()
+    const y = e.clientY - rect.top + scrollEl.scrollTop
+    // Snap to 15-min intervals
+    const slotPx = HOUR_PX / 4
+    return Math.floor(y / slotPx) * 15
   }
 
   function handleColumnClick(e: React.MouseEvent<HTMLDivElement>, day: Date) {
@@ -156,11 +159,17 @@ export function WeekView({ current, bookings, workers = [], onSelectBooking, onB
                 {/* Hover-slot — lyser upp med + när man rör musen */}
                 {hoverInfo?.dayIndex === di && (
                   <div
-                    className="absolute left-0 right-0 z-10 pointer-events-none flex items-center justify-center animate-fade-in"
-                    style={{ top: `${(hoverInfo.slot / 60) * HOUR_PX}px`, height: `${HOUR_PX}px` }}
+                    className="absolute left-0 right-0 z-10 pointer-events-none"
+                    style={{
+                      top: `${(hoverInfo.slot / 60) * HOUR_PX}px`,
+                      height: `${HOUR_PX / 2}px`,
+                      transition: 'top 80ms ease',
+                    }}
                   >
-                    <div className="absolute inset-0 bg-primary/8 border-y border-primary/15 transition-all duration-150" />
-                    <span className="relative text-primary/60 text-xl font-light leading-none">+</span>
+                    <div className="absolute inset-0 bg-primary/10 border-y border-primary/25" />
+                    <span className="absolute left-1 top-0.5 text-xs font-medium text-primary/70 tabular leading-none" style={{ fontSize: '0.6rem' }}>
+                      {String(Math.floor(hoverInfo.slot / 60)).padStart(2, '0')}:{String(hoverInfo.slot % 60).padStart(2, '0')}
+                    </span>
                   </div>
                 )}
 
@@ -239,17 +248,17 @@ export function WeekView({ current, bookings, workers = [], onSelectBooking, onB
         </div>
       </div>
 
-      {newBookingTime && (
-        <CreateBookingModal
-          initialDate={newBookingTime}
-          workers={workers}
-          onClose={() => setNewBookingTime(null)}
-          onCreated={() => {
-            setNewBookingTime(null)
-            onBookingCreated?.()
-          }}
-        />
-      )}
+      <CreateBookingModal
+        key={newBookingTime?.toISOString()}
+        open={newBookingTime !== null}
+        initialDate={newBookingTime ?? new Date()}
+        workers={workers}
+        onClose={() => setNewBookingTime(null)}
+        onCreated={() => {
+          setNewBookingTime(null)
+          onBookingCreated?.()
+        }}
+      />
     </div>
   )
 }

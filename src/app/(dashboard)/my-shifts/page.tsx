@@ -57,7 +57,7 @@ export default function MyShiftsPage() {
     setLoading(false)
   }, [currentUser.id])
 
-  useEffect(() => { fetchData() }, [fetchData])
+  useEffect(() => { (async () => { await fetchData() })() }, [fetchData])
 
   // Filtrera pass på sökning och status
   const filtered = shifts.filter(s => {
@@ -187,14 +187,13 @@ export default function MyShiftsPage() {
         })}
       </div>
 
-      {showCreate && (
-        <CreateShiftModal
-          initialDate={new Date()}
-          currentUser={currentUser}
-          onClose={() => setShowCreate(false)}
-          onCreated={() => { setShowCreate(false); fetchData() }}
-        />
-      )}
+      <CreateShiftModal
+        open={showCreate}
+        initialDate={new Date()}
+        currentUser={currentUser}
+        onClose={() => setShowCreate(false)}
+        onCreated={() => { setShowCreate(false); fetchData() }}
+      />
     </div>
   )
 }

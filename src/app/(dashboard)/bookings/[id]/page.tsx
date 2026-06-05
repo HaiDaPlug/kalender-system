@@ -7,7 +7,7 @@ import {
   ArrowLeft, Car, User, Phone, Clock, Wrench,
   MessageSquare, Loader2, Trash2, CheckCircle2, Save, History
 } from 'lucide-react'
-import type { Booking, BookingStatus, Profile } from '@/types'
+import type { Booking, BookingStatus } from '@/types'
 import { cn } from '@/lib/utils/cn'
 
 const STATUS_OPTIONS: { value: BookingStatus; label: string; color: string }[] = [
@@ -34,7 +34,7 @@ export default function BookingDetailPage() {
   const router   = useRouter()
 
   const [booking, setBooking]     = useState<Booking | null>(null)
-  const [workers, setWorkers]     = useState<Profile[]>([])
+  const workers: { id: string; full_name: string }[] = []
   const [loading, setLoading]     = useState(true)
   const [saving, setSaving]       = useState(false)
   const [deleting, setDeleting]   = useState(false)
@@ -70,20 +70,9 @@ export default function BookingDetailPage() {
   }, [id])
 
   useEffect(() => {
-    fetchBooking()
-    fetch('/api/bookings').then(r => r.json()).then(() => {})
-    // Hämta workers från profiles via bookings-API:t (återanvänder workers från kalender-sidan)
-    fetch('/api/bookings?limit=1').then(() => {})
+    (async () => { await fetchBooking() })()
   }, [fetchBooking])
 
-  // Hämta workers separat
-  useEffect(() => {
-    async function fetchWorkers() {
-      // Tillfällig lösning: hämta via kalender-sidan som redan har workers
-      // Ersätt med /api/workers när den routen finns
-    }
-    fetchWorkers()
-  }, [])
 
   async function handleSave() {
     setSaving(true)

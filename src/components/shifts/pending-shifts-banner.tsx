@@ -4,6 +4,10 @@ import { useState, useEffect, useCallback } from 'react'
 import { Check, X, Clock } from 'lucide-react'
 import type { Shift } from '@/types'
 
+interface Props {
+  reviewerId?: string
+}
+
 function formatShiftTime(shift: Shift): string {
   const start = new Date(shift.starts_at)
   const end   = new Date(shift.ends_at)
@@ -13,14 +17,7 @@ function formatShiftTime(shift: Shift): string {
   return `${date}  ${s}–${e}`
 }
 
-/*
-  Visar väntande pass på dashboard.
-  Goran (admin) kan godkänna/avvisa direkt härifrån.
-  Dev-profil-id är hårdkodat — ersätt med riktig session när auth aktiveras.
-*/
-const DEV_REVIEWER_ID = 'dev'
-
-export function PendingShiftsBanner() {
+export function PendingShiftsBanner({ reviewerId }: Props) {
   const [shifts, setShifts]   = useState<Shift[]>([])
   const [acting, setActing]   = useState<string | null>(null)
 
@@ -30,14 +27,15 @@ export function PendingShiftsBanner() {
     setShifts(Array.isArray(data) ? data : [])
   }, [])
 
-  useEffect(() => { fetchPending() }, [fetchPending])
+  useEffect(() => { (async () => { await fetchPending() })() }, [fetchPending])
 
   async function handleAction(shiftId: string, action: 'approved' | 'rejected') {
+    if (!reviewerId) return
     setActing(shiftId)
     await fetch('/api/shifts/approve', {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ shiftId, action, reviewerId: DEV_REVIEWER_ID }),
+      body: JSON.stringify({ shiftId, action, reviewerId }),
     })
     await fetchPending()
     setActing(null)
@@ -68,24 +66,26 @@ export function PendingShiftsBanner() {
                 </p>
               )}
             </div>
-            <div className="flex gap-1.5 shrink-0">
-              <button
-                onClick={() => handleAction(shift.id, 'approved')}
-                disabled={acting === shift.id}
-                title="Godkänn"
-                className="h-7 w-7 flex items-center justify-center rounded bg-green-500/10 text-green-400 hover:bg-green-500/20 disabled:opacity-40 transition-colors"
-              >
-                <Check className="h-3.5 w-3.5" />
-              </button>
-              <button
-                onClick={() => handleAction(shift.id, 'rejected')}
-                disabled={acting === shift.id}
-                title="Avvisa"
-                className="h-7 w-7 flex items-center justify-center rounded bg-red-500/10 text-red-400 hover:bg-red-500/20 disabled:opacity-40 transition-colors"
-              >
-                <X className="h-3.5 w-3.5" />
-              </button>
-            </div>
+            {reviewerId && (
+              <div className="flex gap-1.5 shrink-0">
+                <button
+                  onClick={() => handleAction(shift.id, 'approved')}
+                  disabled={acting === shift.id}
+                  title="Godkänn"
+                  className="h-7 w-7 flex items-center justify-center rounded bg-green-500/10 text-green-400 hover:bg-green-500/20 disabled:opacity-40 transition-colors"
+                >
+                  <Check className="h-3.5 w-3.5" />
+                </button>
+                <button
+                  onClick={() => handleAction(shift.id, 'rejected')}
+                  disabled={acting === shift.id}
+                  title="Avvisa"
+                  className="h-7 w-7 flex items-center justify-center rounded bg-red-500/10 text-red-400 hover:bg-red-500/20 disabled:opacity-40 transition-colors"
+                >
+                  <X className="h-3.5 w-3.5" />
+                </button>
+              </div>
+            )}
           </div>
         ))}
       </div>

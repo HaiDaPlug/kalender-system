@@ -33,7 +33,7 @@ export function PendingShiftsPanel({ currentUser }: Props) {
     setLoading(false)
   }, [])
 
-  useEffect(() => { fetchPending() }, [fetchPending])
+  useEffect(() => { (async () => { await fetchPending() })() }, [fetchPending])
 
   async function handleAction(shiftId: string, action: 'approved' | 'rejected') {
     setActing(shiftId)

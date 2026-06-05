@@ -39,15 +39,22 @@ create policy "shifts_insert" on shifts for insert
   with check (auth.uid() = worker_id);
 
 -- Admin/manager kan uppdatera alla pass (godkänna/avvisa)
--- Anställd kan bara uppdatera sina egna pass om de är pending
+-- Anställd kan bara uppdatera sina egna pendande pass (t.ex. ändra tid/notering)
 drop policy if exists "shifts_update" on shifts;
 create policy "shifts_update" on shifts for update
   using (
-    auth.uid() = worker_id
-    or exists (
+    exists (
       select 1 from profiles
       where id = auth.uid() and role in ('admin', 'manager')
     )
+    or (auth.uid() = worker_id and status = 'pending')
+  )
+  with check (
+    exists (
+      select 1 from profiles
+      where id = auth.uid() and role in ('admin', 'manager')
+    )
+    or (auth.uid() = worker_id and status = 'pending')
   );
 
 -- Anställd kan ta bort sina egna pendande pass; admin kan ta bort alla

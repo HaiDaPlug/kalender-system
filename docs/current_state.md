@@ -1,5 +1,5 @@
 # KOM-fort Bilvård — Portal: Current State
-_Last updated: 2026-06-05_
+_Last updated: 2026-06-05 (post-audit fixes)_
 
 ---
 
@@ -20,6 +20,7 @@ Built specifically for Göran's and the workers' daily workflow, not a generic c
 |---|---|
 | Framework | Next.js 16.2.7 / App Router, TypeScript, `src/` structure |
 | Styling | Tailwind CSS v4 + shadcn/ui, dark theme, Swedish yellow accent (#F5C842) |
+| Animations | Framer Motion (modal transitions, panel slides) |
 | Database / Auth | Supabase (Postgres + Auth) — Hai's project: `vsnbaylcgcksabwradgu` |
 | Image storage | Supabase Storage |
 | GHL integration | HighLevel API v2 |
@@ -68,6 +69,8 @@ src/
       webhooks/ghl/route.ts            # POST GHL appointment/contact sync
       jobs/[id]/images/route.ts        # POST upload image to Storage
   components/
+    ui/
+      modal.tsx                        # ✅ Shared Modal + SidePanel (CSS transitions, escape key, delayed unmount)
     calendar/
       calendar-view.tsx                # Toolbar, filters, view switcher, "New booking" button
       day-view.tsx                     # 24h grid, hover slot (1h) with +, live time line
@@ -78,7 +81,7 @@ src/
       create-booking-modal.tsx         # ✅ Modal: customer, car, service, status, worker, price
     shifts/
       create-shift-modal.tsx           # ✅ Modal for worker to submit a shift
-      pending-shifts-banner.tsx        # ✅ Yellow banner on dashboard — Göran approves directly
+      pending-shifts-banner.tsx        # ✅ Yellow banner on dashboard — reviewerId prop (no hardcoded id)
       pending-shifts-panel.tsx         # Reusable panel for pending shifts
     layout/
       sidebar.tsx                      # Side menu with nav links
@@ -133,6 +136,7 @@ supabase/
 Three views: **Day / Week / Month**
 
 - Click on empty slot (1h) → hover highlights with `+` → opens "New booking" modal with time prefilled
+- Modal remounts on each new slot click (`key={time.toISOString()}`) — form always resets to correct time
 - Click on existing booking → detail panel slides in from right
 - "New booking" button in toolbar → same modal
 - Double bookings allowed — no blocking in API
@@ -156,7 +160,7 @@ Three views: **Day / Week / Month**
 1. Click time in calendar → modal opens
 2. Fill in: customer (name + phone required), car (make + model required), service, duration, status, worker, price, notes
 3. `POST /api/bookings/create` — creates customer (reuses if phone number exists) + car + booking
-4. SMS confirmation sent via GHL (requires `highlevel_contact_id` on the customer)
+4. SMS sent via GHL **only if** customer has `highlevel_contact_id` — log + `sms_confirmation_sent` flag only set on actual send
 5. Calendar reloads
 
 ---
@@ -260,3 +264,15 @@ npm run dev
 
 **Build:** `npm run build` — passes, 0 errors
 **Lint:** `npm run lint` — passes, 0 errors, 0 warnings
+
+---
+
+## Recent fixes (2026-06-05)
+
+- **Double-submit removed** — booking modal submit button was firing twice (form association + manual `requestSubmit`); now just `type="submit"`
+- **SMS false-positive fixed** — `sms_logs` insert and `sms_confirmation_sent` flag now only set when GHL actually sends (customer has `highlevel_contact_id`)
+- **Hardcoded reviewer removed** — `PendingShiftsBanner` now takes `reviewerId` prop; approve/reject buttons hidden when not provided
+- **Shifts RLS tightened** — worker update policy now requires `status = 'pending'` and adds `with check` clause; workers can't self-approve
+- **Modal extracted** — `src/components/ui/modal.tsx` with `Modal` + `SidePanel`, CSS transitions, escape key, delayed unmount
+- **`CreateBookingModal` remount keys** — all three calendar views pass `key={time.toISOString()}` so form resets correctly on each slot click
+- **Lint rule fixed** — all `useEffect(() => { fetchX() })` patterns wrapped as async IIFEs to satisfy `react-hooks/set-state-in-effect`
