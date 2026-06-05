@@ -1,243 +1,246 @@
-# RenGör — Current State
-_Last updated: 2026-06-05 (arbetspass-system)_
+# KOM-fort Bilvård — Portal: Current State
+_Senast uppdaterad: 2026-06-05_
+
+---
+
+## Om projektet
+
+Internt all-in-one system för KOM-fort Bilvård. Kalender är kärnan — allt flödar därifrån.
+Byggt specifikt för Gorans och de anställdas vardag, inte ett generiskt kalenderverktyg.
+
+- **Repo:** [github.com/HaiDaPlug/kalender-system](https://github.com/HaiDaPlug/kalender-system)
+- **Lokalt:** `/Users/erikryden/kalender-system`
+- **Dev-server:** `npm run dev` → http://localhost:3000
 
 ---
 
 ## Tech stack
 
-| Layer | Choice |
+| Lager | Val |
 |---|---|
-| Framework | Next.js 16.2.7 / App Router, TypeScript, `src/` dir |
-| Styling | Tailwind CSS v4 + shadcn/ui |
-| Database / Auth | Supabase (Postgres + Auth) |
-| Image storage | Supabase Storage |
-| Client cache | TanStack Query (installed, not yet wired to routes) |
-| GHL integration | HighLevel API v2 |
-| SMS | GHL Conversations API (provider field ready for 46elks/Twilio swap) |
-| Font | DM Sans + DM Mono (Plus Jakarta Sans planned) |
+| Ramverk | Next.js 16.2.7 / App Router, TypeScript, `src/`-struktur |
+| Styling | Tailwind CSS v4 + shadcn/ui, mörkt tema, svensk gul accent (#F5C842) |
+| Databas / Auth | Supabase (Postgres + Auth) — Hais projekt: `vsnbaylcgcksabwradgu` |
+| Bildlagring | Supabase Storage |
+| GHL-integration | HighLevel API v2 |
+| SMS | GHL Conversations API (redo för 46elks-byte) |
+| Font | DM Sans + DM Mono |
 
 ---
 
-## File structure — key files
+## Filstruktur — viktiga filer
 
 ```
 src/
-  proxy.ts                        # Next.js 16 auth proxy (currently passthrough)
+  proxy.ts                             # Auth-proxy (passthrough under dev)
+  types/index.ts                       # Alla typer: Booking, Shift, Customer, Car, SmsLog, m.fl.
   lib/
     supabase/
-      client.ts                   # typed browser client
-      server.ts                   # typed server client (Server Components / reads)
-      server-raw.ts               # untyped server client (mutation API routes)
-      service.ts                  # service-role client (bypasses RLS — webhooks only)
-      middleware.ts               # updateSession helper (used by proxy.ts when auth is on)
+      client.ts                        # Browser-klient (typed)
+      server.ts                        # Server-klient för läsning
+      server-raw.ts                    # Okopplad klient för mutation-routes
+      service.ts                       # Service-role, kringgår RLS (endast webhooks)
+      middleware.ts                    # updateSession (aktiveras när auth slås på)
     gohighlevel/
-      client.ts                   # GHL API v2 wrappers (calendar, contacts, conversations)
-      webhooks.ts                 # typed payload parsers for appointment + contact events
+      client.ts                        # GHL API v2: kalender, kontakter, SMS
+      webhooks.ts                      # Payload-parsers för appointment + contact
   app/
-    (auth)/login/                 # Swedish login form
+    (auth)/login/                      # Inloggningssida (svenska)
     (dashboard)/
-      layout.tsx                  # reads real profile when session exists; dev stub otherwise
-      dashboard/                  # stats + recent bookings (hardcoded 0-state)
-      calendar/                   # full calendar page — fetches real data from Supabase
-      bookings/                   # table view (hardcoded empty)
-      jobs/                       # kanban board (hardcoded empty)
-      workers/                    # table (hardcoded empty)
-      settings/                   # placeholder
+      layout.tsx                       # Läser profil från session; DEV_PROFILE-stub annars
+      dashboard/page.tsx               # Översikt: stats + väntande pass-banner + senaste bokningar
+      calendar/page.tsx                # Kalender — hämtar data från Supabase
+      bookings/page.tsx                # Bokningslista (hårdkodad tom — ej prioriterad)
+      bookings/[id]/page.tsx           # ✅ Bokningsdetaljsida med full redigering
+      customers/[id]/page.tsx          # ✅ Kundhistorik: besök, bilar, SMS, anteckningar
+      my-shifts/page.tsx               # ✅ Mina pass: lägg in, sök, se kopplade bokningar
+      jobs/page.tsx                    # Kanban-board (hårdkodad tom)
+      workers/page.tsx                 # Personallista (hårdkodad tom)
+      settings/page.tsx                # Platshållare
     api/
-      bookings/                   # GET/POST list+create; GET/PATCH/DELETE single
-      jobs/[id]/images/           # POST upload before/after image to Storage
-      sms/send/                   # POST send SMS via GHL, write sms_log
-      webhooks/ghl/               # POST receive GHL appointment/contact webhooks
+      bookings/route.ts                # GET lista, POST enkel
+      bookings/create/route.ts         # ✅ POST kund+bil+bokning+SMS i ett anrop
+      bookings/[id]/route.ts           # GET, PATCH, DELETE enskild bokning
+      shifts/route.ts                  # ✅ GET filtrera pass, POST skapa pass
+      shifts/approve/route.ts          # ✅ POST godkänn/avvisa (kräver admin/manager)
+      customers/[id]/route.ts          # ✅ GET full kundprofil, PATCH anteckningar
+      sms/send/route.ts                # POST manuellt SMS via GHL
+      webhooks/ghl/route.ts            # POST GHL appointment/contact sync
+      jobs/[id]/images/route.ts        # POST ladda upp bild till Storage
   components/
     calendar/
-      calendar-view.tsx           # toolbar, filters, status legend, view switcher
-      day-view.tsx                # 24h grid, lane-based overlap layout, live time line
-      week-view.tsx               # 7-col grid, same layout engine, per-column time line
-      month-view.tsx              # compact monthly grid, click to drill to day
-      booking-detail-panel.tsx    # slide-in detail panel, links to /bookings/[id]
-      calendar-utils.ts           # layout math: computeBookingLayouts, time helpers
+      calendar-view.tsx                # Toolbar, filter, vybyte, "Ny bokning"-knapp
+      day-view.tsx                     # 24h-grid, hover-slot (1h) med +, live tidslinje
+      week-view.tsx                    # 7-kol grid, hover-slot per kolumn
+      month-view.tsx                   # Månadsvy, klick → dagvy
+      booking-detail-panel.tsx         # Slide-in panel från höger vid klick på bokning
+      calendar-utils.ts                # Layout-math, tidshjälpare
+      create-booking-modal.tsx         # ✅ Modal: kund, bil, tjänst, status, tekniker, pris
+    shifts/
+      create-shift-modal.tsx           # ✅ Modal för anställd att lägga in pass
+      pending-shifts-banner.tsx        # ✅ Gul banner på dashboard — Goran godkänner direkt
+      pending-shifts-panel.tsx         # Återanvändbar panel för väntande pass
     layout/
-      sidebar.tsx
-      top-bar.tsx                 # shows user avatar initials, calls signOut() on logout
+      sidebar.tsx                      # Sidomeny med nav-länkar
+      top-bar.tsx                      # Toprad med datum, avatar, utloggning
       providers.tsx
     auth/login-form.tsx
     booking/bookings-table.tsx
-    jobs/jobs-board.tsx
-    workers/workers-table.tsx
-  types/
-    index.ts                      # Booking, CleaningJob, SmsLog, ActivityLog, etc.
-    database.ts                   # Supabase Database type stub
+    dashboard/dashboard-stats.tsx
+    dashboard/recent-bookings.tsx
 supabase/
-  schema.sql                      # full initial schema (run once on a fresh DB)
+  schema.sql                           # Fullt schema — kör en gång på ny DB
   migrations/
-    001_additive.sql              # additive migration for existing DBs (idempotent)
+    001_additive.sql                   # Additivt: calendar_color, SMS-kolumner, RLS-fixes
+    002_shifts.sql                     # ✅ Shifts-tabell med RLS
 ```
 
 ---
 
-## Database schema
+## Databas
 
-| Table | Purpose |
+| Tabell | Syfte |
 |---|---|
-| `profiles` | Workers/admins (extends `auth.users` via trigger), roles: admin/manager/worker |
-| `customers` | Customer records, linked to GHL contact ID |
-| `cars` | Cars per customer (make, model, reg plate, VIN, color) |
-| `bookings` | Core booking — customer, car, worker, status, GHL appointment ID, calendar_color, two SMS flags |
-| `cleaning_jobs` | Job execution — worker, status, started/completed timestamps, notes |
-| `job_images` | Before/after images with storage path, uploader, type |
-| `sms_logs` | SMS audit trail — type (confirmation/ready_for_pickup/manual), provider, delivery timestamp |
-| `activity_log` | Audit trail — who did what, actor_id enforced to match auth.uid() |
-| `highlevel_sync_logs` | Webhook + sync audit, unique index on (highlevel_id) for idempotency |
+| `profiles` | Anställda/admin, roller: admin/manager/worker |
+| `customers` | Kundregister kopplat till GHL |
+| `cars` | Bilar per kund (märke, modell, regnr, färg) |
+| `bookings` | Kärnbokning — kund, bil, tekniker, status, SMS-flaggor |
+| `shifts` | Arbetspass — worker_id, starts_at, ends_at, status (pending/approved/rejected) |
+| `cleaning_jobs` | Jobbkörning — tekniker, status, start/klar-timestamps |
+| `job_images` | Före/efter-bilder med storage-path |
+| `sms_logs` | SMS-logg med typ, provider, leveranstid |
+| `activity_log` | Revisionsspår |
+| `highlevel_sync_logs` | Webhook-logg med idempotens |
 
-RLS on all tables. Auto-trigger creates `profiles` row on signup.
-
-**New columns added via `001_additive.sql`** (use this for existing DBs):
-- `bookings.calendar_color` — hex color override for calendar display
-- `bookings.sms_ready_for_pickup_sent` — second SMS flag for "car is ready" flow
-- `sms_logs.sms_type`, `sms_logs.provider`, `sms_logs.provider_message_id`, `sms_logs.delivery_callback_at`
-- SMS unique partial index prevents duplicate auto-sends (blocks pending + sent, not just sent)
-- `images_insert_auth` policy dropped; replaced with `images_insert_own_job` (workers can only upload to their own job)
-- `activity_log_insert` enforces `auth.uid() = actor_id` (entries cannot be forged)
+**Migrations att köra i ordning:**
+1. `schema.sql` (ny DB) eller hoppa till steg 2 om tabeller finns
+2. `001_additive.sql`
+3. `002_shifts.sql`
 
 ---
 
 ## Auth
 
-- Supabase Auth, three roles: `admin` / `manager` / `worker`
-- **Currently bypassed** — `src/proxy.ts` returns `NextResponse.next()` unconditionally
-- Dashboard layout falls back to a `DEV_PROFILE` stub when no session exists
-- Calendar page falls back to service-role client in `development` only (gated on `NODE_ENV`)
-- **To enable auth**: replace `proxy.ts` body with `return updateSession(request)`, remove `DEV_PROFILE` fallback from `layout.tsx`
-
-Logout calls `supabase.auth.signOut()` before redirecting (was missing before).
+- Supabase Auth, tre roller: `admin` / `manager` / `worker`
+- **Just nu avslagen** — `proxy.ts` returnerar `NextResponse.next()` direkt
+- Layout använder `DEV_PROFILE`-stub (Hai Pham Bui, admin) när ingen session finns
+- **För att slå på:** ersätt `proxy.ts` med `return updateSession(request)`, ta bort `DEV_PROFILE` i `layout.tsx`
 
 ---
 
-## Calendar — the main feature
+## Kalender — kärnan
 
-Full Google Calendar-like experience, Swedish UI, three views:
+Tre vyer: **Dag / Vecka / Månad**
 
-**Dag (Day):** 24h vertical time grid, booking blocks proportional to duration, lane-based overlap layout (concurrent bookings render side-by-side, not on top of each other), live current-time line updating every 60s, SMS dot, click → detail panel.
+- Klick på tom tid (1h-slot) → hover lyser upp med `+` → öppnar "Ny bokning"-modalen med tid förifylld
+- Klick på befintlig bokning → detaljpanel glider in från höger
+- "Ny bokning"-knapp i toolbar → samma modal
+- Dubbelbokningar tillåtna
+- Live-tidslinje uppdateras var 60:e sekund
+- Statusfilter + teknikerfilter i toolbar
 
-**Vecka (Week):** 7-column grid with week number, same lane layout per column, current-time line on today only.
+---
 
-**Månad (Month):** compact monthly grid, up to 3 events per cell, click day → drills to dag view.
+## Bokningsflöde (skapa)
 
-**Toolbar:** Idag button, prev/next navigation, status filter, worker filter, status legend with per-status counts.
+1. Klick på tid i kalender → modal öppnas
+2. Fyll i: kund (namn + telefon krävs), bil (märke + modell krävs), tjänst, längd, status, tekniker, pris, anteckningar
+3. `POST /api/bookings/create` — skapar kund (återanvänder om telefonnr finns) + bil + bokning
+4. SMS-bekräftelse skickas via GHL (kräver `highlevel_contact_id` på kunden)
+5. Kalender laddas om
 
-**Booking detail panel:** slides in on click, shows service/time/address, customer name+phone, car make/model/plate/color, assigned worker, notes, SMS status. "Öppna bokning" links to `/bookings/[id]`.
+---
 
-**Data:** fetched server-side from Supabase at page load. Bookings and active workers.
+## Bokningsdetaljsida (`/bookings/[id]`)
+
+Redigera direkt på sidan — inga dolda formulär:
+- **Status** — klicka på rätt statusbadge
+- **Tid, längd, tjänst, tekniker, pris** — redigerbara fält
+- **Kundönskemål + interna anteckningar** — tydligt separerade
+- **Historik-länk** → hoppar till kundens fullständiga historik
+- **Ta bort** med bekräftelsedialog
+
+---
+
+## Kundhistorik (`/customers/[id]`)
+
+- Statistik: antal besök, antal klara, antal bilar, totalt spenderat
+- Alla bilar kunden haft inne med regnummer
+- Senaste besök
+- Anteckningar om kunden (sparas direkt)
+- **Bokningshistorik** — klickbar lista, varje rad → bokningssidan
+- **SMS-fliken** — alla SMS med typ, tidsstämpel, meddelandetext
+
+---
+
+## Arbetspass-system
+
+**Flöde:**
+1. Anställd går till "Mina pass" → "Lägg in pass" → fyller i starttid/sluttid/kommentar
+2. Pass skapas med `status=pending`
+3. Goran ser gul banner på dashboard → godkänner ✓ eller avvisar ✗ med ett klick
+4. Anställd ser sina pass med sök + statusfilter
+5. Under varje pass visas kopplade bokningar (bokningar vars tid faller inom passet)
+
+---
+
+## Animationer & UX
+
+- **Modaler:** scale-in från mitten med spring-känsla
+- **Detaljpanel:** slide-in från höger
+- **Sidnavigation:** fade-up vid sidbyte
+- **Sidomenyns hover:** glider 0.5px åt höger
+- **Knappar:** scale(0.97) på klick
+- **Hover-slot i kalender:** fade-in, subtil bakgrund
 
 ---
 
 ## GHL webhook (`/api/webhooks/ghl`)
 
-- **Signature:** Ed25519 via `X-GHL-Signature`. Reads `GHL_WEBHOOK_PUBLIC_KEY` — must be the raw 32-byte Ed25519 public key, base64-encoded (NOT DER/SPKI). Missing key rejects all requests in production; skipped only in `NODE_ENV=development`.
-- **Idempotency key:** `${type}:${entityId}:${contentHash}` — content hash covers the mutable fields (status, startTime, endTime for appointments; name/email/phone for contacts). Identical retries deduplicate; genuine updates with different content get a new key and are processed.
-- **Race-safe flow:** row is inserted as `success=false` before processing (outside the unique index). On success it is flipped to `success=true` (entering the index). A crash before the flip leaves a retryable failed row. Two concurrent requests for the same delivery both process (business ops are idempotent) and whichever commits first wins.
-- **Unique index:** partial on `action = 'webhook_received' AND success = true` — failed rows are excluded so retries are never permanently blocked.
-- **Client:** uses service-role client to bypass RLS (safe because request is verified first).
-- **Payload shape:** appointment fields are nested under `appointment{}`. Uses `apt.appointmentStatus` not `apt.status`.
+- Ed25519-signatur via `X-GHL-Signature` (`GHL_WEBHOOK_PUBLIC_KEY` = raw 32-byte base64)
+- Idempotens: `${type}:${entityId}:${contentHash}`
+- Race-safe: rad sätts `success=false` före, flippas efter — retries blockeras aldrig
 
 ---
 
-## API routes
+## API-routes
 
-| Route | Methods | Notes |
+| Route | Metoder | Notering |
 |---|---|---|
-| `/api/bookings` | GET, POST | Filters: status, worker_id, from, to |
-| `/api/bookings/[id]` | GET, PATCH, DELETE | Single booking CRUD |
-| `/api/jobs/[id]/images` | POST | Upload to Supabase Storage |
-| `/api/sms/send` | POST | Manual SMS via GHL; writes sms_log |
-| `/api/webhooks/ghl` | POST | GHL appointment/contact sync |
+| `/api/bookings` | GET, POST | Filter: status, worker_id, from, to |
+| `/api/bookings/create` | POST | Kund+bil+bokning+SMS atomärt |
+| `/api/bookings/[id]` | GET, PATCH, DELETE | Enskild bokning |
+| `/api/shifts` | GET, POST | Filter: worker_id, status, from, to |
+| `/api/shifts/approve` | POST | Godkänn/avvisa (admin/manager) |
+| `/api/customers/[id]` | GET, PATCH | Kundprofil + historik |
+| `/api/sms/send` | POST | Manuellt SMS via GHL |
+| `/api/webhooks/ghl` | POST | GHL sync |
+| `/api/jobs/[id]/images` | POST | Bilduppladdning |
 
 ---
 
-## Arbetspass-system (2026-06-05)
+## Vad som saknas / nästa steg
 
-Anställda kan lägga in pass, Göran godkänner dem.
-
-**Ny migration:** `supabase/migrations/002_shifts.sql` — kör i Supabase SQL editor efter 001.
-
-**Nya filer:**
-- `src/types/index.ts` — `Shift`, `ShiftStatus` tillagda
-- `src/app/api/shifts/route.ts` — GET (filtrera på worker, status, datum) + POST (skapa pass)
-- `src/app/api/shifts/approve/route.ts` — POST godkänn/avvisa (kräver admin/manager-roll)
-- `src/components/shifts/create-shift-modal.tsx` — modal för att lägga in pass, skickas med status=pending
-- `src/components/shifts/pending-shifts-banner.tsx` — banner på dashboard, Göran godkänner direkt
-- `src/components/shifts/pending-shifts-panel.tsx` — återanvändbar panel (admin ser alla, worker ser sina)
-- `src/app/(dashboard)/my-shifts/page.tsx` — "Mina pass" — sök, filtrera status, se kopplade bokningar + kommentarer
-
-**Flöde:**
-1. Anställd klickar "Lägg in pass" (sidomeny: Mina pass) → fyller i starttid, sluttid, ev. kommentar
-2. Pass skapas med status=pending och syns direkt i "Mina pass"
-3. Göran ser gul banner på dashboard → godkänner eller avvisar med ett klick
-4. Kommentarer och önskemål på bokningar visas tydligt (blå badge) under kopplade pass
-
-## Skapa bokning-flöde (2026-06-05)
-
-Göran och tekniker kan nu skapa bokningar direkt i kalendern:
-
-- **Klick på tom tid** i dag- eller veckovyn öppnar modal med tiden förifylld
-- **"Ny bokning"-knapp** i toolbar öppnar samma modal med nuvarande tid
-- **Modalen** (`create-booking-modal.tsx`) samlar: kund (namn, telefon, email), bil (märke, modell, regnr, färg), tjänst, längd, tekniker, pris, anteckningar
-- **API** (`/api/bookings/create`) skapar kund (återanvänder vid samma telefonnummer) + bil + bokning i sekvens
-- **SMS-bekräftelse** skickas automatiskt via GHL efter skapande; fel i SMS stoppar inte bokningen
-- Dubbelbokningar tillåtna — ingen blockering i API:t
-- Kalendern uppdateras via `window.location.reload()` efter skapande
-
-## What is NOT built yet
-
-| Feature | Priority |
+| Funktion | Prioritet |
 |---|---|
-| Booking detail page (`/bookings/[id]`) | High — "Öppna bokning" links here but page is 404 |
-| Auto-SMS on booking create (confirmation) | High — GHL-integration klar men kräver highlevel_contact_id på kunden |
-| Auto-SMS on job complete (ready for pickup) | High |
-| 46elks SMS provider — decision pending | Medium |
-| Worker views (`/my-cars`, `/my-cars/today`) | High |
-| `/customers` and `/cars` pages | Medium |
-| Activity log UI | Medium |
-| Image thumbnail gallery on booking detail | Medium |
-| TanStack Query wired (installed but unused) | Medium |
-| `/settings/integrations/highlevel` page | Medium |
-| Supabase Auth fully enabled (proxy.ts is passthrough) | **Before any real use** |
-| Real data on bookings/jobs/workers pages (only calendar is live) | High |
-| Drag-and-drop booking movement on calendar | Low |
-| Plus Jakarta Sans font (planned) | Low |
-| GHL_WEBHOOK_PUBLIC_KEY set to GHL's raw Ed25519 public key (base64) | Before webhooks go live |
+| Auth aktiverad (proxy.ts är passthrough) | **Före produktionsbruk** |
+| SMS via 46elks (byta ut GHL) | Hög |
+| Auto-SMS vid bokning (kräver highlevel_contact_id) | Hög |
+| Auto-SMS när bil är klar | Hög |
+| Bokningslista med riktig data (`/bookings`) | Hög |
+| Personal-sida med riktig data (`/workers`) | Medium |
+| Drag-and-drop i kalender | Låg |
+| Kundlista (`/customers`) | Medium |
+| Aktivitetslogg-UI | Låg |
 
 ---
 
-## To get the app running locally
+## Komma igång lokalt
 
 ```bash
-# 1. Install dependencies
 npm install
-
-# 2. Fill in credentials
-# Edit .env.local — Supabase URL/keys are already set, add GHL keys
-
-# 3. Run schema on a fresh Supabase DB
-# → paste supabase/schema.sql into Supabase SQL editor
-
-# OR for an existing DB, run the migration:
-# → paste supabase/migrations/001_additive.sql
-
-# 4. Create storage buckets in Supabase dashboard
-# → car-before-images
-# → car-after-images
-
-# 5. Start dev server
+# Skapa .env.local med Supabase-nycklar (se .env.example)
+# Kör schema.sql + migrations i Supabase SQL editor
 npm run dev
-# → http://localhost:3000 (redirects to /dashboard, auth bypassed, calendar shows real data)
+# → http://localhost:3000
 ```
-
-**Build:** `npm run build` — passes, 0 errors  
-**Lint:** `npm run lint` — passes, 0 errors, 0 warnings
-
----
-
-## Repo
-
-[github.com/HaiDaPlug/kalender-system](https://github.com/HaiDaPlug/kalender-system)
