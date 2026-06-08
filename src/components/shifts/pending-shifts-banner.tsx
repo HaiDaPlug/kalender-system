@@ -8,6 +8,18 @@ interface Props {
   reviewerId?: string
 }
 
+async function readErrorMessage(res: Response, fallback: string): Promise<string> {
+  const text = await res.text()
+  if (!text) return fallback
+
+  try {
+    const data = JSON.parse(text) as { error?: string }
+    return data.error ?? fallback
+  } catch {
+    return text
+  }
+}
+
 function formatShiftTime(shift: Shift): string {
   const start = new Date(shift.starts_at)
   const end   = new Date(shift.ends_at)
@@ -20,28 +32,48 @@ function formatShiftTime(shift: Shift): string {
 export function PendingShiftsBanner({ reviewerId }: Props) {
   const [shifts, setShifts]   = useState<Shift[]>([])
   const [acting, setActing]   = useState<string | null>(null)
+  const [error, setError]     = useState<string | null>(null)
 
   const fetchPending = useCallback(async () => {
-    const res  = await fetch('/api/shifts?status=pending')
-    const data = await res.json()
-    setShifts(Array.isArray(data) ? data : [])
+    try {
+      const res = await fetch('/api/shifts?status=pending')
+      if (!res.ok) {
+        setError(await readErrorMessage(res, 'Kunde inte hämta väntande pass'))
+        return
+      }
+
+      const data = await res.json()
+      setShifts(Array.isArray(data) ? data : [])
+    } catch {
+      setError('Nätverksfel — kunde inte hämta väntande pass')
+    }
   }, [])
 
   useEffect(() => { (async () => { await fetchPending() })() }, [fetchPending])
 
   async function handleAction(shiftId: string, action: 'approved' | 'rejected') {
     if (!reviewerId) return
+    setError(null)
     setActing(shiftId)
-    await fetch('/api/shifts/approve', {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ shiftId, action, reviewerId }),
-    })
-    await fetchPending()
-    setActing(null)
+    try {
+      const res = await fetch('/api/shifts/approve', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ shiftId, action, reviewerId }),
+      })
+      if (!res.ok) {
+        setError(await readErrorMessage(res, 'Något gick fel, försök igen'))
+      } else {
+        await fetchPending()
+      }
+    } catch {
+      setError('Nätverksfel — kontrollera anslutningen')
+    } finally {
+      setActing(null)
+    }
   }
 
-  if (shifts.length === 0) return null
+  if (shifts.length === 0 && !error) return null
 
   return (
     <div className="rounded border border-amber-400/30 bg-amber-400/5 overflow-hidden animate-fade-up">
@@ -51,6 +83,14 @@ export function PendingShiftsBanner({ reviewerId }: Props) {
           {shifts.length} pass väntar på godkännande
         </span>
       </div>
+      {error && (
+        <div className="px-4 py-2 text-xs text-red-400 bg-red-500/10 border-b border-red-500/20 flex items-center justify-between">
+          <span>{error}</span>
+          <button onClick={() => setError(null)} className="ml-2 hover:text-red-300">
+            <X className="h-3 w-3" />
+          </button>
+        </div>
+      )}
       <div className="divide-y divide-amber-400/10">
         {shifts.map(shift => (
           <div key={shift.id} className="px-4 py-3 flex items-start gap-3">

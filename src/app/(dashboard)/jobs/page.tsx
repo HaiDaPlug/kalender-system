@@ -15,7 +15,7 @@ export default function JobsPage() {
     setLoading(false)
   }, [])
 
-  useEffect(() => { fetchJobs() }, [fetchJobs])
+  useEffect(() => { (async () => { await fetchJobs() })() }, [fetchJobs])
 
   return (
     <div className="space-y-5">

@@ -1,6 +1,7 @@
 'use client'
 
 import { useState, useMemo, useCallback } from 'react'
+import { useRouter } from 'next/navigation'
 import type { Booking, BookingStatus, Profile } from '@/types'
 import { ChevronLeft, ChevronRight, CalendarDays, Plus } from 'lucide-react'
 import { CreateBookingModal } from './create-booking-modal'
@@ -33,6 +34,7 @@ const VIEWS: { key: CalendarView; label: string }[] = [
 const ALL_STATUSES = Object.keys(STATUS_CONFIG) as BookingStatus[]
 
 export function CalendarView({ bookings, workers = [] }: Props) {
+  const router = useRouter()
   const [view, setView] = useState<CalendarView>('vecka')
   const [current, setCurrent] = useState(new Date())
   const [selectedBooking, setSelectedBooking] = useState<Booking | null>(null)
@@ -41,10 +43,10 @@ export function CalendarView({ bookings, workers = [] }: Props) {
   const [showCreateModal, setShowCreateModal] = useState(false)
   const [createModalTime, setCreateModalTime] = useState<Date>(new Date())
 
-  // Uppdaterar bokningslistan efter ny bokning skapats — laddar om sidan
+  // Refresh server data without losing client state (view, filters, scroll position)
   const handleBookingCreated = useCallback(() => {
-    window.location.reload()
-  }, [])
+    router.refresh()
+  }, [router])
 
   // Navigation
   const navigate = (dir: -1 | 1) => {

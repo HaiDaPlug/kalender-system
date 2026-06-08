@@ -3,6 +3,7 @@
 import { useState, useRef, useCallback, useEffect } from 'react'
 import { Camera, Upload, Loader2, CheckCircle2, ImageIcon, X } from 'lucide-react'
 import type { CleaningJob } from '@/types'
+import { Lightbox } from '@/components/ui/lightbox'
 
 interface Props {
   bookingId: string
@@ -37,7 +38,7 @@ export function JobPhotos({ bookingId, workerId }: Props) {
     setLoading(false)
   }, [bookingId])
 
-  useEffect(() => { fetchJob() }, [fetchJob])
+  useEffect(() => { (async () => { await fetchJob() })() }, [fetchJob])
 
   async function ensureJob(): Promise<string | null> {
     if (job) return job.id
@@ -106,6 +107,10 @@ export function JobPhotos({ bookingId, workerId }: Props) {
   const beforeImages = images.filter(i => i.type === 'before')
   const afterImages  = images.filter(i => i.type === 'after')
 
+  // Lightbox state — all images in one flat array for arrow navigation
+  const [lightboxIndex, setLightboxIndex] = useState<number | null>(null)
+  const allImages = [...beforeImages, ...afterImages]
+
   if (loading) {
     return (
       <div className="flex items-center gap-2 py-2 text-muted-foreground">
@@ -161,13 +166,18 @@ export function JobPhotos({ bookingId, workerId }: Props) {
         ) : (
           <div className="grid grid-cols-3 gap-1.5">
             {beforeImages.map(img => (
-              <a key={img.id} href={img.public_url} target="_blank" rel="noopener noreferrer">
+              <button
+                key={img.id}
+                onClick={() => setLightboxIndex(allImages.findIndex(a => a.id === img.id))}
+                className="w-full"
+              >
+                {/* eslint-disable-next-line @next/next/no-img-element */}
                 <img
                   src={img.public_url}
                   alt="Före"
                   className="w-full aspect-square object-cover rounded border border-border hover:opacity-90 transition-opacity"
                 />
-              </a>
+              </button>
             ))}
             <button
               onClick={() => beforeRef.current?.click()}
@@ -225,13 +235,18 @@ export function JobPhotos({ bookingId, workerId }: Props) {
         ) : (
           <div className="grid grid-cols-3 gap-1.5">
             {afterImages.map(img => (
-              <a key={img.id} href={img.public_url} target="_blank" rel="noopener noreferrer">
+              <button
+                key={img.id}
+                onClick={() => setLightboxIndex(allImages.findIndex(a => a.id === img.id))}
+                className="w-full"
+              >
+                {/* eslint-disable-next-line @next/next/no-img-element */}
                 <img
                   src={img.public_url}
                   alt="Efter"
                   className="w-full aspect-square object-cover rounded border border-border hover:opacity-90 transition-opacity"
                 />
-              </a>
+              </button>
             ))}
             <button
               onClick={() => afterRef.current?.click()}
@@ -255,10 +270,27 @@ export function JobPhotos({ bookingId, workerId }: Props) {
         </div>
       )}
       {job?.status === 'completed' && (
-        <div className="flex items-center gap-2 pt-1 text-xs text-primary bg-primary/10 px-3 py-2 rounded">
-          <CheckCircle2 className="h-3.5 w-3.5 shrink-0" />
-          Jobbet är godkänt
+        <div className="pt-1 text-xs bg-primary/10 px-3 py-2 rounded space-y-1">
+          <div className="flex items-center gap-2 text-primary">
+            <CheckCircle2 className="h-3.5 w-3.5 shrink-0" />
+            Jobbet är godkänt
+          </div>
+          {job.admin_notes && (
+            <p className="text-muted-foreground pl-5">
+              <span className="font-medium text-foreground">Gorans kommentar: </span>
+              {job.admin_notes}
+            </p>
+          )}
         </div>
+      )}
+
+      {lightboxIndex !== null && (
+        <Lightbox
+          images={allImages.map(i => ({ url: i.public_url, alt: i.type === 'before' ? 'Före' : 'Efter' }))}
+          index={lightboxIndex}
+          onClose={() => setLightboxIndex(null)}
+          onNavigate={setLightboxIndex}
+        />
       )}
     </div>
   )

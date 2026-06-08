@@ -1,5 +1,5 @@
 # KOM-fort Bilvård — Portal: Current State
-_Last updated: 2026-06-05_
+_Last updated: 2026-06-08 (session 2)_
 
 ---
 
@@ -73,6 +73,7 @@ src/
   components/
     ui/
       modal.tsx                        # ✅ Reusable Modal + SidePanel with smooth CSS transitions
+      lightbox.tsx                     # ✅ Fullscreen image lightbox with arrow + keyboard navigation
       button.tsx
     calendar/
       calendar-view.tsx                # Toolbar, filters, view switcher, "New booking" button
@@ -154,6 +155,7 @@ Three views: **Day / Week / Month**
 - Double bookings allowed — no blocking in API
 - Live time line updates every 60 seconds, auto-scrolls to current time on load
 - Status filter + worker filter in toolbar
+- After a booking is created, `router.refresh()` re-fetches server data without losing view/filter/scroll state (previously used `window.location.reload()`)
 
 ---
 
@@ -219,14 +221,20 @@ Workers document their work directly from the booking detail page (`/bookings/[i
 1. Sidebar shows "Granskning" link (only for admin/manager)
 2. Badge shows how many jobs are waiting
 3. Filter: *Waiting / All / Done*
-4. Each job card expands to show before and after photos side by side
-5. Click "Godkänn jobbet" → status changes to `completed`
+4. Jobs are grouped by date (Today / Yesterday / older dates) and sorted newest first
+5. Each job card expands to show before and after photos side by side
+6. Click any photo → opens fullscreen lightbox with arrow navigation (keyboard arrows + Escape supported)
+7. Before approving, Göran can optionally write a comment to the worker
+8. Click "Godkänn jobbet" → status changes to `completed`, comment saved as `admin_notes`
+9. Worker sees Göran's comment on their booking page once the job is approved
 
 **Technical notes:**
 - `cleaning_jobs` has a `unique(booking_id)` constraint — one job per booking
 - Job is created lazily: first photo upload triggers `POST /api/jobs` if no job exists yet
 - Images are stored at `{jobId}/{timestamp}.{ext}` inside the bucket
 - `GET /api/jobs?booking_id=` is used by `JobPhotos` to check if a job already exists
+- `admin_notes` field on `cleaning_jobs` stores Göran's feedback comment
+- Lightbox component lives at `src/components/ui/lightbox.tsx` — reused in both worker and admin views
 
 ---
 
@@ -249,6 +257,8 @@ Workers document their work directly from the booking detail page (`/bookings/[i
 3. Göran sees yellow banner on dashboard → approves ✓ or rejects ✗ with one click
 4. Worker sees their shifts with search + status filter
 5. Each shift shows linked bookings (bookings whose time falls within the shift)
+
+**Banner visibility:** Only rendered for `admin` and `manager` roles — workers never see it. `reviewerId` is passed from `DashboardPage` only when a real authenticated user exists, so the dev stub is not sent to the approval API. Error handling shows an inline red message if fetching, approving, or rejecting shifts fails, with a dismiss button.
 
 ---
 
