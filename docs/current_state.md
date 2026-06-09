@@ -90,7 +90,7 @@ src/
       pending-shifts-banner.tsx        # ✅ Yellow banner on dashboard — Göran approves directly
       pending-shifts-panel.tsx         # Reusable panel for pending shifts
     jobs/
-      jobs-board.tsx                   # ✅ Kanban board component (4 columns by status)
+      jobs-board.tsx                   # ✅ Kanban board component (4 columns by status) — cards link to /bookings/[id]
       job-photos.tsx                   # ✅ Before/after photo upload component for workers
     layout/
       sidebar.tsx                      # Side menu: Översikt, Kalender, Mina pass, Jobb, Granskning*, Personal* (*admin/manager only)
@@ -358,3 +358,4 @@ npm run dev
 - **Job documentation always visible:** `JobPhotos` section now shown for all non-cancelled bookings regardless of whether a worker is assigned. `workerId` prop made optional.
 - **Notes section disabled for non-admins:** Customer wishes and internal notes now have the same `pointerEvents/opacity` treatment as booking fields — no more editable-looking fields that can't be saved.
 - **"Tekniker" renamed to "Ansvarig"** across bookings table, detail panel, and calendar filter — reflects that admins and managers can also be assigned.
+- **Job board cards are now clickable** — each card links to `/bookings/[id]` so workers can navigate directly from the kanban board to the booking.

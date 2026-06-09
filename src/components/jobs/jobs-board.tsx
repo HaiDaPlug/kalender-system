@@ -1,3 +1,4 @@
+import Link from 'next/link'
 import type { CleaningJob } from '@/types'
 import { format } from 'date-fns'
 import { sv } from 'date-fns/locale'
@@ -70,9 +71,10 @@ export function JobsBoard({ jobs }: { jobs: CleaningJob[] }) {
                 </div>
               )}
               {colJobs.map(job => (
-                <div
+                <Link
                   key={job.id}
-                  className="rounded border border-border bg-secondary/30 p-3 space-y-2 hover:bg-secondary/60 transition-colors cursor-default"
+                  href={`/bookings/${job.booking_id}`}
+                  className="block rounded border border-border bg-secondary/30 p-3 space-y-2 hover:bg-secondary/60 hover:border-primary/30 transition-colors"
                 >
                   <p className="text-sm font-medium text-foreground truncate leading-tight">
                     {job.booking?.customer?.full_name ?? 'Okänd kund'}
@@ -91,7 +93,7 @@ export function JobsBoard({ jobs }: { jobs: CleaningJob[] }) {
                       </span>
                     )}
                   </div>
-                </div>
+                </Link>
               ))}
             </div>
           </div>
