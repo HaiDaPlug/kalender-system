@@ -50,14 +50,14 @@ src/
       layout.tsx                       # Reads profile from session; DEV_PROFILE stub otherwise
       dashboard/page.tsx               # Overview: stats + pending shifts banner + recent bookings
       calendar/page.tsx                # Calendar — fetches data from Supabase
-      bookings/page.tsx                # Bookings list (hardcoded empty — not prioritised)
+      bookings/page.tsx                # Bookings list — not linked in sidebar (calendar covers this)
       bookings/[id]/page.tsx           # ✅ Booking detail page with full editing + job photo section
       customers/[id]/page.tsx          # ✅ Customer history: visits, cars, SMS, notes
       my-shifts/page.tsx               # ✅ My shifts: add, search, view linked bookings
       jobs/page.tsx                    # ✅ Kanban board — fetches live data from /api/jobs
       admin/job-reviews/page.tsx       # ✅ Admin before/after photo review page (Göran only)
       workers/page.tsx                 # ✅ Staff management — list all employees, change roles, activate/deactivate, add new
-      settings/page.tsx                # Placeholder
+      settings/page.tsx                # Placeholder — not linked in sidebar
     api/
       bookings/route.ts                # GET list, POST simple
       bookings/create/route.ts         # ✅ POST customer+car+booking+SMS in one call
@@ -93,7 +93,7 @@ src/
       jobs-board.tsx                   # ✅ Kanban board component (4 columns by status)
       job-photos.tsx                   # ✅ Before/after photo upload component for workers
     layout/
-      sidebar.tsx                      # Side menu — "Granskning" link visible for admin/manager
+      sidebar.tsx                      # Side menu: Översikt, Kalender, Mina pass, Jobb, Granskning*, Personal* (*admin/manager only)
       top-bar.tsx                      # Top bar with date, avatar, logout
       providers.tsx
     auth/login-form.tsx
@@ -308,7 +308,7 @@ Workers document their work directly from the booking detail page (`/bookings/[i
 | Auto-SMS when car is ready | High |
 | Dashboard stats with real data (totalBookings, activeJobs, completedToday) | Medium |
 | Recent bookings on dashboard with real data | Medium |
-| Bookings list page (`/bookings`) with real data | Medium |
+| Bookings list page (`/bookings`) | Removed from nav — calendar covers this use case |
 | Staff page (`/workers`) | ~~Done~~ — roles, activate/deactivate, add employee |
 | my-shifts page: replace DEV_USER with real session user | Requires auth |
 | Drag-and-drop in calendar | Low |
@@ -353,3 +353,8 @@ npm run dev
 - **`PATCH /api/workers/[id]` always uses service client** after admin check — fixes dev mode where skipping auth check left the anon client in place (blocked by RLS).
 - **Migration `004_admin_manage_profiles.sql`:** allows admins to update and insert any profile row.
 - **Migration `005_bookings_admin_only.sql`:** restricts booking insert/update policies to `role = 'admin'` (previously also allowed managers).
+- **Dead files removed:** `workers-table.tsx`, `use-auth.ts`, `use-supabase.ts` — none were imported anywhere.
+- **Sidebar cleaned up:** "Bokningar" and "Inställningar" links removed — no functional pages behind them. Calendar covers booking visibility.
+- **Job documentation always visible:** `JobPhotos` section now shown for all non-cancelled bookings regardless of whether a worker is assigned. `workerId` prop made optional.
+- **Notes section disabled for non-admins:** Customer wishes and internal notes now have the same `pointerEvents/opacity` treatment as booking fields — no more editable-looking fields that can't be saved.
+- **"Tekniker" renamed to "Ansvarig"** across bookings table, detail panel, and calendar filter — reflects that admins and managers can also be assigned.
