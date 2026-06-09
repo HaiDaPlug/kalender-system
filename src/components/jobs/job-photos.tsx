@@ -7,7 +7,7 @@ import { Lightbox } from '@/components/ui/lightbox'
 
 interface Props {
   bookingId: string
-  workerId: string
+  workerId?: string | null
 }
 
 interface UploadedImage {
@@ -45,7 +45,7 @@ export function JobPhotos({ bookingId, workerId }: Props) {
     const res = await fetch('/api/jobs', {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ booking_id: bookingId, worker_id: workerId }),
+      body: JSON.stringify({ booking_id: bookingId, worker_id: workerId ?? null }),
     })
     if (!res.ok) {
       setError('Kunde inte starta jobbet')

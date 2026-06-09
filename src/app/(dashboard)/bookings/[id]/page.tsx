@@ -378,11 +378,11 @@ export default function BookingDetailPage() {
         </div>
       </div>
 
-      {/* Före/efter-bilder */}
-      {booking?.assigned_worker_id && (
+      {/* Job documentation — shown for all non-cancelled bookings */}
+      {booking?.status !== 'cancelled' && (
         <div className="rounded border border-border bg-card p-4 space-y-4">
           <p className="label-caps">Jobbdokumentation</p>
-          <JobPhotos bookingId={id} workerId={booking.assigned_worker_id} />
+          <JobPhotos bookingId={id} workerId={booking?.assigned_worker_id ?? null} />
         </div>
       )}
 
