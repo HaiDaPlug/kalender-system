@@ -7,7 +7,6 @@ import type { Profile } from '@/types'
 import {
   LayoutDashboard,
   CalendarDays,
-  BookOpen,
   Users,
   Briefcase,
   Settings,
@@ -18,7 +17,6 @@ import {
 const NAV = [
   { href: '/dashboard',          label: 'Översikt',      icon: LayoutDashboard },
   { href: '/calendar',           label: 'Kalender',      icon: CalendarDays },
-  { href: '/bookings',           label: 'Bokningar',     icon: BookOpen },
   { href: '/my-shifts',          label: 'Mina pass',     icon: CalendarClock },
   { href: '/jobs',               label: 'Jobb',          icon: Briefcase },
   { href: '/admin/job-reviews',  label: 'Granskning',    icon: ScanEye, adminOnly: true },
