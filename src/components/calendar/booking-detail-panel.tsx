@@ -112,9 +112,9 @@ export function BookingDetailPanel({ booking, onClose }: Props) {
 
             <div className="h-px bg-border" />
 
-            {/* Worker */}
+            {/* Assigned employee */}
             <div className="space-y-2">
-              <p className="label-caps">Tekniker</p>
+              <p className="label-caps">Ansvarig</p>
               {booking.assigned_worker ? (
                 <div className="flex items-center gap-2">
                   <div className="h-6 w-6 rounded-full bg-primary/10 border border-primary/20 flex items-center justify-center text-xs font-semibold text-primary shrink-0">

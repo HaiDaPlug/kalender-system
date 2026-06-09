@@ -74,7 +74,7 @@ export function CreateShiftModal({ open, initialDate, currentUser, onClose, onCr
       <div className="flex items-center justify-between px-5 py-4 border-b border-border">
         <div>
           <h2 className="text-sm font-semibold">Lägg in pass</h2>
-          <p className="text-xs text-muted-foreground mt-0.5">Skickas till Goran för godkännande</p>
+          <p className="text-xs text-muted-foreground mt-0.5">Skickas för godkännande</p>
         </div>
         <button
           onClick={onClose}
@@ -133,7 +133,7 @@ export function CreateShiftModal({ open, initialDate, currentUser, onClose, onCr
 
       {/* Footer */}
       <div className="flex items-center justify-between px-5 py-4 border-t border-border gap-3">
-        <p className="text-xs text-muted-foreground">Passet syns direkt — aktiveras när Goran godkänner</p>
+        <p className="text-xs text-muted-foreground">Passet aktiveras efter godkännande</p>
         <div className="flex gap-2">
           <button
             type="button"

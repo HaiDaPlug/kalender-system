@@ -266,7 +266,7 @@ export function JobPhotos({ bookingId, workerId }: Props) {
       {afterImages.length > 0 && job?.status !== 'completed' && (
         <div className="flex items-center gap-2 pt-1 text-xs text-green-400 bg-green-500/10 px-3 py-2 rounded">
           <CheckCircle2 className="h-3.5 w-3.5 shrink-0" />
-          Bilder inskickade — Goran granskar jobbet
+          Bilder inskickade — väntar på granskning
         </div>
       )}
       {job?.status === 'completed' && (
@@ -277,7 +277,7 @@ export function JobPhotos({ bookingId, workerId }: Props) {
           </div>
           {job.admin_notes && (
             <p className="text-muted-foreground pl-5">
-              <span className="font-medium text-foreground">Gorans kommentar: </span>
+              <span className="font-medium text-foreground">Kommentar: </span>
               {job.admin_notes}
             </p>
           )}

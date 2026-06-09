@@ -23,7 +23,7 @@ export default async function CalendarPage() {
       .from('profiles')
       .select('*')
       .eq('is_active', true)
-      .in('role', ['worker', 'manager']),
+      .in('role', ['worker', 'manager', 'admin']),
   ])
 
   return (

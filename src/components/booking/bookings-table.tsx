@@ -15,7 +15,7 @@ export function BookingsTable({ bookings }: { bookings: Booking[] }) {
     <div className="rounded border border-border bg-card overflow-hidden">
       {/* Table head */}
       <div className="grid border-b border-border px-5 py-2.5" style={{ gridTemplateColumns: '1fr 1fr 1fr 1fr 1fr auto' }}>
-        {['Kund', 'Bil', 'Tjänst', 'Tidpunkt', 'Tekniker', 'Status'].map(h => (
+        {['Kund', 'Bil', 'Tjänst', 'Tidpunkt', 'Ansvarig', 'Status'].map(h => (
           <span key={h} className="label-caps">{h}</span>
         ))}
       </div>

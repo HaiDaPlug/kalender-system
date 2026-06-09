@@ -145,7 +145,7 @@ export function CalendarView({ bookings, workers = [] }: Props) {
             onChange={e => setWorkerFilter(e.target.value)}
             className="h-7 text-xs rounded border border-border bg-secondary text-foreground px-2 focus:outline-none focus:ring-1 focus:ring-primary"
           >
-            <option value="all">Alla tekniker</option>
+            <option value="all">Alla ansvariga</option>
             {workers.map(w => (
               <option key={w.id} value={w.id}>{w.full_name}</option>
             ))}

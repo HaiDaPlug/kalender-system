@@ -3,7 +3,7 @@ import { createRawClient } from '@/lib/supabase/server-raw'
 
 /*
   POST /api/shifts/approve
-  Goran (admin/manager) godkänner eller avvisar ett pass.
+  Admin/manager godkänner eller avvisar ett pass.
   Body: { shiftId, action: 'approved' | 'rejected', reviewerId }
 */
 export async function POST(request: NextRequest) {
