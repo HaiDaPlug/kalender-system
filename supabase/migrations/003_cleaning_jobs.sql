@@ -16,15 +16,18 @@ create table if not exists cleaning_jobs (
 
 alter table cleaning_jobs enable row level security;
 
+drop policy if exists "jobs_select" on cleaning_jobs;
 create policy "jobs_select" on cleaning_jobs for select
   using (
     auth.uid() = worker_id
     or exists (select 1 from profiles where id = auth.uid() and role in ('admin','manager'))
   );
 
+drop policy if exists "jobs_insert" on cleaning_jobs;
 create policy "jobs_insert" on cleaning_jobs for insert
   with check (auth.uid() = worker_id);
 
+drop policy if exists "jobs_update" on cleaning_jobs;
 create policy "jobs_update" on cleaning_jobs for update
   using (
     auth.uid() = worker_id
@@ -45,6 +48,7 @@ create table if not exists job_images (
 
 alter table job_images enable row level security;
 
+drop policy if exists "images_select" on job_images;
 create policy "images_select" on job_images for select
   using (
     exists (
