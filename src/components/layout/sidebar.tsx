@@ -9,7 +9,6 @@ import {
   CalendarDays,
   Users,
   Briefcase,
-  Settings,
   CalendarClock,
   ScanEye,
 } from 'lucide-react'
@@ -21,7 +20,6 @@ const NAV = [
   { href: '/jobs',               label: 'Jobb',          icon: Briefcase },
   { href: '/admin/job-reviews',  label: 'Granskning',    icon: ScanEye, adminOnly: true },
   { href: '/workers',            label: 'Personal',      icon: Users, adminOnly: true },
-  { href: '/settings',           label: 'Inställningar', icon: Settings },
 ]
 
 const ROLE_LABELS: Record<string, string> = {
