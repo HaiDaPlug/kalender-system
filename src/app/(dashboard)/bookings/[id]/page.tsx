@@ -345,8 +345,8 @@ export default function BookingDetailPage() {
         </div>
       </div>
 
-      {/* Anteckningar */}
-      <div className="rounded border border-border bg-card p-4 space-y-4">
+      {/* Notes — disabled for non-admins, same visual treatment as booking fields */}
+      <div className="rounded border border-border bg-card p-4 space-y-4" style={{ pointerEvents: canEdit ? undefined : 'none', opacity: canEdit ? 1 : 0.6 }}>
         <p className="label-caps">Anteckningar</p>
 
         <div className="space-y-1.5">
