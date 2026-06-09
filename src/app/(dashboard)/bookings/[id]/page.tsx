@@ -24,6 +24,11 @@ const SERVICES = [
   'Polering', 'Lackskydd', 'Motortvättning', 'Övrigt',
 ]
 
+interface AssignableEmployee {
+  id: string
+  full_name: string
+}
+
 function toLocalInputValue(iso: string): string {
   const d = new Date(iso)
   const pad = (n: number) => String(n).padStart(2, '0')
@@ -35,12 +40,16 @@ export default function BookingDetailPage() {
   const router   = useRouter()
 
   const [booking, setBooking]     = useState<Booking | null>(null)
-  const workers: { id: string; full_name: string }[] = []
+  const [workers, setWorkers]     = useState<AssignableEmployee[]>([])
+  const [myRole, setMyRole]       = useState<string>('admin') // optimistic default, resolved on mount
   const [loading, setLoading]     = useState(true)
   const [saving, setSaving]       = useState(false)
   const [deleting, setDeleting]   = useState(false)
   const [saved, setSaved]         = useState(false)
   const [error, setError]         = useState<string | null>(null)
+
+  // Only admin can edit/delete bookings — managers and workers are read-only for now
+  const canEdit = myRole === 'admin'
 
   // Redigerbara fält
   const [status, setStatus]           = useState<BookingStatus>('confirmed')
@@ -73,6 +82,24 @@ export default function BookingDetailPage() {
   useEffect(() => {
     (async () => { await fetchBooking() })()
   }, [fetchBooking])
+
+  useEffect(() => {
+    async function fetchWorkers() {
+      const res = await fetch('/api/workers')
+      if (!res.ok) { setError('Kunde inte hämta anställda'); return }
+      const data: AssignableEmployee[] = await res.json()
+      setWorkers(data)
+    }
+    async function fetchMe() {
+      const res = await fetch('/api/me')
+      if (res.ok) {
+        const data = await res.json() as { role: string }
+        setMyRole(data.role)
+      }
+    }
+    void fetchWorkers()
+    void fetchMe()
+  }, [])
 
 
   async function handleSave() {
@@ -215,8 +242,8 @@ export default function BookingDetailPage() {
         </div>
       </div>
 
-      {/* Redigerbara bokningsfält */}
-      <div className="rounded border border-border bg-card p-4 space-y-4">
+      {/* Booking fields — editable only for admin */}
+      <div className="rounded border border-border bg-card p-4 space-y-4" style={{ pointerEvents: canEdit ? undefined : 'none', opacity: canEdit ? 1 : 0.6 }}>
         <p className="label-caps">Bokning</p>
 
         {/* Status */}
@@ -288,7 +315,7 @@ export default function BookingDetailPage() {
             </select>
           </div>
           <div className="space-y-1.5">
-            <label className="label-caps text-muted-foreground">Tekniker</label>
+            <label className="label-caps text-muted-foreground">Ansvarig</label>
             <select
               value={workerId}
               onChange={e => setWorkerId(e.target.value)}
@@ -374,31 +401,33 @@ export default function BookingDetailPage() {
         <p className="text-xs text-red-500 bg-red-500/10 px-3 py-2 rounded">{error}</p>
       )}
 
-      {/* Spara + ta bort */}
-      <div className="flex items-center justify-between gap-3">
-        <button
-          onClick={handleDelete}
-          disabled={deleting}
-          className="flex items-center gap-2 px-4 py-2 text-sm rounded border border-red-500/30 text-red-400 hover:bg-red-500/10 disabled:opacity-40 transition-colors"
-        >
-          {deleting ? <Loader2 className="h-3.5 w-3.5 animate-spin" /> : <Trash2 className="h-3.5 w-3.5" />}
-          Ta bort
-        </button>
+      {/* Save + delete — only visible to admin */}
+      {canEdit && (
+        <div className="flex items-center justify-between gap-3">
+          <button
+            onClick={handleDelete}
+            disabled={deleting}
+            className="flex items-center gap-2 px-4 py-2 text-sm rounded border border-red-500/30 text-red-400 hover:bg-red-500/10 disabled:opacity-40 transition-colors"
+          >
+            {deleting ? <Loader2 className="h-3.5 w-3.5 animate-spin" /> : <Trash2 className="h-3.5 w-3.5" />}
+            Ta bort
+          </button>
 
-        <button
-          onClick={handleSave}
-          disabled={saving}
-          className="flex items-center gap-2 px-5 py-2 text-sm rounded bg-primary text-primary-foreground hover:opacity-90 disabled:opacity-50 transition-opacity font-medium"
-        >
-          {saving
-            ? <Loader2 className="h-3.5 w-3.5 animate-spin" />
-            : saved
-            ? <CheckCircle2 className="h-3.5 w-3.5" />
-            : <Save className="h-3.5 w-3.5" />
-          }
-          {saved ? 'Sparat!' : 'Spara ändringar'}
-        </button>
-      </div>
+          <button
+            onClick={handleSave}
+            disabled={saving}
+            className="flex items-center gap-2 px-5 py-2 text-sm rounded bg-primary text-primary-foreground hover:opacity-90 disabled:opacity-50 transition-opacity font-medium"
+          >
+            {saving
+              ? <Loader2 className="h-3.5 w-3.5 animate-spin" />
+              : saved
+              ? <CheckCircle2 className="h-3.5 w-3.5" />
+              : <Save className="h-3.5 w-3.5" />
+            }
+            {saved ? 'Sparat!' : 'Spara ändringar'}
+          </button>
+        </div>
+      )}
     </div>
   )
 }

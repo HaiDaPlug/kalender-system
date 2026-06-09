@@ -1,5 +1,5 @@
 # KOM-fort Bilvård — Portal: Current State
-_Last updated: 2026-06-08 (session 2)_
+_Last updated: 2026-06-09_
 
 ---
 
@@ -56,7 +56,7 @@ src/
       my-shifts/page.tsx               # ✅ My shifts: add, search, view linked bookings
       jobs/page.tsx                    # ✅ Kanban board — fetches live data from /api/jobs
       admin/job-reviews/page.tsx       # ✅ Admin before/after photo review page (Göran only)
-      workers/page.tsx                 # Staff list (hardcoded empty)
+      workers/page.tsx                 # ✅ Staff management — list all employees, change roles, activate/deactivate, add new
       settings/page.tsx                # Placeholder
     api/
       bookings/route.ts                # GET list, POST simple
@@ -70,6 +70,8 @@ src/
       jobs/route.ts                    # ✅ GET list (supports ?booking_id=), POST create job
       jobs/[id]/route.ts               # ✅ GET single job, PATCH status/notes
       jobs/[id]/images/route.ts        # ✅ POST upload image to Supabase Storage
+      workers/route.ts                 # ✅ GET active/all employees; POST invites via Supabase Auth Admin API
+      workers/[id]/route.ts           # ✅ PATCH role or is_active (admin only, uses service client)
   components/
     ui/
       modal.tsx                        # ✅ Reusable Modal + SidePanel with smooth CSS transitions
@@ -128,6 +130,8 @@ supabase/
 2. `001_additive.sql`
 3. `002_shifts.sql`
 4. `003_cleaning_jobs.sql`
+5. `004_admin_manage_profiles.sql` — admins can update/insert any profile row
+6. `005_bookings_admin_only.sql` — booking insert/update restricted to admin only (was admin+manager)
 
 **Storage buckets (create manually in Supabase dashboard, set to public):**
 - `car-before-images`
@@ -287,6 +291,9 @@ Workers document their work directly from the booking detail page (`/bookings/[i
 | `/api/jobs` | GET, POST | List jobs (`?booking_id=` filter), create job |
 | `/api/jobs/[id]` | GET, PATCH | Single job — status, notes, timestamps |
 | `/api/jobs/[id]/images` | POST | Upload image to Supabase Storage |
+| `/api/workers` | GET, POST | GET: `?all=true` includes inactive; POST: invite new employee via Supabase Auth |
+| `/api/workers/[id]` | PATCH | Update role or `is_active` — admin only, uses service client |
+| `/api/me` | GET | Current user's profile (id, role, full_name); returns dev stub when no session |
 
 ---
 
@@ -299,10 +306,13 @@ Workers document their work directly from the booking detail page (`/bookings/[i
 | SMS via 46elks (replace GHL) | High |
 | Auto-SMS on booking create (requires highlevel_contact_id) | High |
 | Auto-SMS when car is ready | High |
-| Bookings list with real data (`/bookings`) | High |
-| Staff page with real data (`/workers`) | Medium |
+| Dashboard stats with real data (totalBookings, activeJobs, completedToday) | Medium |
+| Recent bookings on dashboard with real data | Medium |
+| Bookings list page (`/bookings`) with real data | Medium |
+| Staff page (`/workers`) | ~~Done~~ — roles, activate/deactivate, add employee |
+| my-shifts page: replace DEV_USER with real session user | Requires auth |
 | Drag-and-drop in calendar | Low |
-| Customer list (`/customers`) | Medium |
+| Customer list (`/customers`) | Low |
 | Activity log UI | Low |
 | GHL_WEBHOOK_PUBLIC_KEY configured | Before webhooks go live |
 
@@ -321,3 +331,25 @@ npm run dev
 
 **Build:** `npm run build` — passes, 0 errors  
 **Lint:** `npm run lint` — passes, 0 errors, 0 warnings
+
+---
+
+## Changelog
+
+### 2026-06-09
+- **Job photo flow:** `JobPhotos` component on `/bookings/[id]` — workers upload before/after photos, status auto-updates (`not_started` → `in_progress` → `needs_review`). Lightbox for fullscreen image viewing with keyboard navigation.
+- **Admin job review page** (`/admin/job-reviews`): before/after photos side by side, date grouping (Today/Yesterday/older), approve with optional comment. Only visible to admin/manager.
+- **Pending shifts banner:** now only rendered for admin/manager roles. Error handling added for failed fetch and approve/reject actions.
+- **Calendar refetch fix:** `window.location.reload()` replaced with `router.refresh()` — filter state and scroll position preserved after creating a booking.
+- **Workers assignment dropdown fixed:** `/bookings/[id]` now fetches all active employees via `GET /api/workers` — Göran can assign any employee including himself. Label changed from "Tekniker" to "Ansvarig".
+- **New API route:** `GET /api/workers` — returns all active profiles (worker + manager + admin), sorted by name.
+- **Calendar worker filter:** now includes admins so bookings assigned to Göran appear correctly.
+- **Hardcoded "Goran" strings removed** from `job-photos.tsx` and `create-shift-modal.tsx` — replaced with role-neutral text.
+- **Lint fixes:** `useEffect` async calls wrapped with `void`, `<img>` elements in lightbox and job-reviews suppressed with eslint comments (external Supabase URLs, dimensions unknown).
+- **Job review bug fixes:** `handleMarkDone` now checks `res.ok` before updating UI; local state updated from full API response (includes `admin_notes` and `completed_at`).
+- **Staff management page** (`/workers`): rebuilt from scratch — `GET /api/workers?all=true`, inline role dropdown, activate/deactivate toggle, add employee form. Admin's own row is locked from editing.
+- **Add employee via Supabase Auth invite** (`POST /api/workers`): uses `supabase.auth.admin.inviteUserByEmail` to create auth user first (avoids FK violation from inserting profiles with random UUID), then upserts the profile row with name/role/phone. Employee receives a signup email.
+- **Booking edit restricted to admin only:** `canEdit = myRole === 'admin'` (managers are read-only). DB RLS updated via `005_bookings_admin_only.sql` to match. Stale "admin and manager" comments in booking page removed.
+- **`PATCH /api/workers/[id]` always uses service client** after admin check — fixes dev mode where skipping auth check left the anon client in place (blocked by RLS).
+- **Migration `004_admin_manage_profiles.sql`:** allows admins to update and insert any profile row.
+- **Migration `005_bookings_admin_only.sql`:** restricts booking insert/update policies to `role = 'admin'` (previously also allowed managers).
