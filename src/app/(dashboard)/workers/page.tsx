@@ -1,21 +1,40 @@
 'use client'
 
 import { useState, useEffect } from 'react'
-import { Loader2, UserCheck, UserX, ChevronDown, Plus, X } from 'lucide-react'
+import { Loader2, UserCheck, UserX, ChevronDown, Plus, X, Info } from 'lucide-react'
 import type { Profile, UserRole } from '@/types'
 import { cn } from '@/lib/utils/cn'
 
 const ROLE_CONFIG: Record<UserRole, { label: string; color: string; bg: string }> = {
   admin:   { label: 'Administratör', color: '#F5C842', bg: '#F5C84218' },
-  manager: { label: 'Chef',          color: '#4A90D9', bg: '#4A90D918' },
-  worker:  { label: 'Tekniker',      color: '#8B5CF6', bg: '#8B5CF618' },
+  manager: { label: 'Admin',         color: '#4A90D9', bg: '#4A90D918' },
+  worker:  { label: 'Personal',      color: '#8B5CF6', bg: '#8B5CF618' },
 }
 
 // Permissions per role — matches actual enforcement in the codebase
 const ROLE_PERMISSIONS: Record<UserRole, string[]> = {
-  admin:   ['Se kalender', 'Skapa bokningar', 'Redigera bokningar', 'Ta bort bokningar', 'Hantera personal', 'Granska jobb'],
-  manager: ['Se kalender', 'Granska jobb'],
-  worker:  ['Se kalender', 'Ladda upp jobbfoton', 'Hantera egna pass'],
+  admin:   ['Se kalender', 'Skapa bokningar', 'Redigera bokningar', 'Ta bort bokningar', 'Hantera personal', 'Granska jobb', 'Godkänna/avvisa bokningar'],
+  manager: ['Se kalender', 'Granska jobb', 'Godkänna/avvisa bokningar'],
+  worker:  ['Se kalender', 'Skicka in bokningar (kräver godkännande)', 'Ladda upp jobbfoton', 'Hantera egna pass'],
+}
+
+
+const ROLE_DESCRIPTIONS: Record<UserRole, { title: string; description: string; useCase: string }> = {
+  admin: {
+    title: 'Administratör — superadmin',
+    description: 'Kan göra allt i systemet: skapa och redigera bokningar, hantera personal, godkänna eller avvisa biljobb och se hela kalendern.',
+    useCase: 'Används av dig (Goran). Bör bara finnas på ett konto.',
+  },
+  manager: {
+    title: 'Admin — delegerad godkännanderätt',
+    description: 'Kan godkänna och avvisa inkommande biljobb precis som Administratören. Kan inte ändra andra bokningar, ta bort data eller hantera personal.',
+    useCase: 'Ge denna roll till någon du litar på när du är bortrest eller otillgänglig. De kan hålla flödet igång utan att ha full kontroll.',
+  },
+  worker: {
+    title: 'Personal — standardroll',
+    description: 'Kan skicka in nya biljobb via kalendern. Bokningen hamnar som "väntande" och måste godkännas av en Admin eller Administratör innan den bekräftas.',
+    useCase: 'Standardroll för alla nya anställda. Alla nya konton börjar här.',
+  },
 }
 
 function RoleDropdown({ current, onChange, disabled }: {
@@ -60,6 +79,49 @@ function RoleDropdown({ current, onChange, disabled }: {
             ))}
           </div>
         </>
+      )}
+    </div>
+  )
+}
+
+function RoleDelegationGuide() {
+  const [open, setOpen] = useState(false)
+
+  return (
+    <div className="rounded border border-border bg-card overflow-hidden">
+      <button
+        onClick={() => setOpen(v => !v)}
+        className="w-full flex items-center gap-2.5 px-4 py-3 text-left hover:bg-secondary/30 transition-colors"
+      >
+        <Info className="h-4 w-4 text-blue-400 shrink-0" />
+        <span className="text-sm font-medium flex-1">Vad innebär varje roll? — guide för delegering</span>
+        <ChevronDown className={cn('h-4 w-4 text-muted-foreground transition-transform', open && 'rotate-180')} />
+      </button>
+
+      {open && (
+        <div className="border-t border-border divide-y divide-border/60">
+          {(Object.keys(ROLE_DESCRIPTIONS) as UserRole[]).map(role => {
+            const cfg = ROLE_CONFIG[role]
+            const desc = ROLE_DESCRIPTIONS[role]
+            return (
+              <div key={role} className="px-4 py-4 space-y-2">
+                <div className="flex items-center gap-2">
+                  <div className="h-2 w-2 rounded-full shrink-0" style={{ background: cfg.color }} />
+                  <p className="text-sm font-semibold" style={{ color: cfg.color }}>{desc.title}</p>
+                </div>
+                <p className="text-sm text-foreground/90 pl-4">{desc.description}</p>
+                <p className="text-xs text-muted-foreground pl-4 italic">{desc.useCase}</p>
+                <div className="flex flex-wrap gap-1.5 pl-4 pt-1">
+                  {ROLE_PERMISSIONS[role].map(perm => (
+                    <span key={perm} className="text-xs px-2 py-0.5 rounded border border-border text-muted-foreground">
+                      {perm}
+                    </span>
+                  ))}
+                </div>
+              </div>
+            )
+          })}
+        </div>
       )}
     </div>
   )
@@ -329,6 +391,9 @@ export default function WorkersPage() {
 
       {/* Add employee form */}
       <AddWorkerForm onAdded={handleAdded} />
+
+      {/* Role delegation guide */}
+      <RoleDelegationGuide />
 
       {/* Role legend */}
       <div className="flex gap-4 flex-wrap">

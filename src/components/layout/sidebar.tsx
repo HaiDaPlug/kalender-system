@@ -24,8 +24,8 @@ const NAV = [
 
 const ROLE_LABELS: Record<string, string> = {
   admin: 'Administratör',
-  manager: 'Chef',
-  worker: 'Tekniker',
+  manager: 'Admin',
+  worker: 'Personal',
 }
 
 export function Sidebar({ profile }: { profile: Profile | null }) {

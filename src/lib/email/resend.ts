@@ -37,7 +37,7 @@ async function sendEmail(to: string, subject: string, html: string): Promise<boo
   return res.ok
 }
 
-// Sent to admin (Göran) when a worker submits a booking for approval.
+// Sent to admin (Goran) when a worker submits a booking for approval.
 export async function sendBookingSubmitted(data: BookingEmailData): Promise<{ sent: boolean }> {
   const date = new Date(data.scheduledAt).toLocaleString('sv-SE', {
     weekday: 'long', day: 'numeric', month: 'long', hour: '2-digit', minute: '2-digit',
@@ -59,7 +59,7 @@ export async function sendBookingSubmitted(data: BookingEmailData): Promise<{ se
   return { sent }
 }
 
-// Sent to the worker when Göran approves their submitted booking.
+// Sent to the worker when Goran approves their submitted booking.
 export async function sendBookingApproved(data: BookingEmailData): Promise<{ sent: boolean }> {
   const date = new Date(data.scheduledAt).toLocaleString('sv-SE', {
     weekday: 'long', day: 'numeric', month: 'long', hour: '2-digit', minute: '2-digit',
@@ -80,7 +80,7 @@ export async function sendBookingApproved(data: BookingEmailData): Promise<{ sen
   return { sent }
 }
 
-// Sent to the worker when Göran rejects their submitted booking.
+// Sent to the worker when Goran rejects their submitted booking.
 export async function sendBookingRejected(data: BookingEmailData & { reason?: string }): Promise<{ sent: boolean }> {
   const html = `
     <h2>Din bokning avvisades</h2>

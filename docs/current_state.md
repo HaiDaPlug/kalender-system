@@ -1,12 +1,12 @@
 # KOM-fort Bilvård — Portal: Current State
-_Last updated: 2026-06-09_
+_Last updated: 2026-06-11_
 
 ---
 
 ## About the project
 
 Internal all-in-one system for KOM-fort Bilvård. The calendar is the core — everything flows from it.
-Built specifically for Göran's and the workers' daily workflow, not a generic calendar tool.
+Built specifically for Goran's and the workers' daily workflow, not a generic calendar tool.
 
 - **Repo:** [github.com/HaiDaPlug/kalender-system](https://github.com/HaiDaPlug/kalender-system)
 - **Dev server:** `npm run dev` → http://localhost:3000
@@ -55,7 +55,7 @@ src/
       customers/[id]/page.tsx          # ✅ Customer history: visits, cars, SMS, notes
       my-shifts/page.tsx               # ✅ My shifts: add, search, view linked bookings
       jobs/page.tsx                    # ✅ Kanban board — fetches live data from /api/jobs
-      admin/job-reviews/page.tsx       # ✅ Admin before/after photo review page (Göran only)
+      admin/job-reviews/page.tsx       # ✅ Admin before/after photo review page (Goran only)
       workers/page.tsx                 # ✅ Staff management — list all employees, change roles, activate/deactivate, add new
       settings/page.tsx                # Placeholder — not linked in sidebar
     api/
@@ -87,7 +87,7 @@ src/
       create-booking-modal.tsx         # ✅ Modal: customer, car, service, status, worker, price
     shifts/
       create-shift-modal.tsx           # ✅ Modal for worker to submit a shift
-      pending-shifts-banner.tsx        # ✅ Yellow banner on dashboard — Göran approves directly
+      pending-shifts-banner.tsx        # ✅ Yellow banner on dashboard — Goran approves directly
       pending-shifts-panel.tsx         # Reusable panel for pending shifts
     jobs/
       jobs-board.tsx                   # ✅ Kanban board component (4 columns by status) — cards link to /bookings/[id]
@@ -115,7 +115,7 @@ supabase/
 
 | Table | Purpose |
 |---|---|
-| `profiles` | Workers/admins, roles: admin/manager/worker |
+| `profiles` | Employees, roles: admin (Administratör) / manager (Admin) / worker (Personal) |
 | `customers` | Customer registry linked to GHL |
 | `cars` | Cars per customer (make, model, plate, color) |
 | `bookings` | Core booking — customer, car, worker, status, SMS flags |
@@ -144,7 +144,7 @@ supabase/
 
 ## Auth
 
-- Supabase Auth, three roles: `admin` / `manager` / `worker`
+- Supabase Auth, three roles: `admin` (Administratör) / `manager` (Admin) / `worker` (Personal)
 - **Currently disabled** — `proxy.ts` returns `NextResponse.next()` unconditionally
 - Layout uses `DEV_PROFILE` stub (Hai Pham Bui, admin) when no session exists
 - **To enable:** replace `proxy.ts` body with `return updateSession(request)`, remove `DEV_PROFILE` from `layout.tsx`
@@ -224,23 +224,23 @@ Workers document their work directly from the booking detail page (`/bookings/[i
 5. Multiple photos can be added per phase
 6. Status auto-updates: `not_started` → `in_progress` (on first before-photo) → `needs_review` (on first after-photo)
 
-**Göran's review flow (`/admin/job-reviews`):**
+**Goran's review flow (`/admin/job-reviews`):**
 1. Sidebar shows "Granskning" link (only for admin/manager)
 2. Badge shows how many jobs are waiting
 3. Filter: *Waiting / All / Done*
 4. Jobs are grouped by date (Today / Yesterday / older dates) and sorted newest first
 5. Each job card expands to show before and after photos side by side
 6. Click any photo → opens fullscreen lightbox with arrow navigation (keyboard arrows + Escape supported)
-7. Before approving, Göran can optionally write a comment to the worker
+7. Before approving, Goran can optionally write a comment to the worker
 8. Click "Godkänn jobbet" → status changes to `completed`, comment saved as `admin_notes`
-9. Worker sees Göran's comment on their booking page once the job is approved
+9. Worker sees Goran's comment on their booking page once the job is approved
 
 **Technical notes:**
 - `cleaning_jobs` has a `unique(booking_id)` constraint — one job per booking
 - Job is created lazily: first photo upload triggers `POST /api/jobs` if no job exists yet
 - Images are stored at `{jobId}/{timestamp}.{ext}` inside the bucket
 - `GET /api/jobs?booking_id=` is used by `JobPhotos` to check if a job already exists
-- `admin_notes` field on `cleaning_jobs` stores Göran's feedback comment
+- `admin_notes` field on `cleaning_jobs` stores Goran's feedback comment
 - Lightbox component lives at `src/components/ui/lightbox.tsx` — reused in both worker and admin views
 
 ---
@@ -261,7 +261,7 @@ Workers document their work directly from the booking detail page (`/bookings/[i
 **Flow:**
 1. Worker goes to "My shifts" → "Add shift" → fills in start/end time + optional note
 2. Shift created with `status=pending`
-3. Göran sees yellow banner on dashboard → approves ✓ or rejects ✗ with one click
+3. Goran sees yellow banner on dashboard → approves ✓ or rejects ✗ with one click
 4. Worker sees their shifts with search + status filter
 5. Each shift shows linked bookings (bookings whose time falls within the shift)
 
@@ -345,9 +345,9 @@ npm run dev
 - **Admin job review page** (`/admin/job-reviews`): before/after photos side by side, date grouping (Today/Yesterday/older), approve with optional comment. Only visible to admin/manager.
 - **Pending shifts banner:** now only rendered for admin/manager roles. Error handling added for failed fetch and approve/reject actions.
 - **Calendar refetch fix:** `window.location.reload()` replaced with `router.refresh()` — filter state and scroll position preserved after creating a booking.
-- **Workers assignment dropdown fixed:** `/bookings/[id]` now fetches all active employees via `GET /api/workers` — Göran can assign any employee including himself. Label changed from "Tekniker" to "Ansvarig".
+- **Workers assignment dropdown fixed:** `/bookings/[id]` now fetches all active employees via `GET /api/workers` — Goran can assign any employee including himself. Label changed from "Tekniker" to "Ansvarig".
 - **New API route:** `GET /api/workers` — returns all active profiles (worker + manager + admin), sorted by name.
-- **Calendar worker filter:** now includes admins so bookings assigned to Göran appear correctly.
+- **Calendar worker filter:** now includes admins so bookings assigned to Goran appear correctly.
 - **Hardcoded "Goran" strings removed** from `job-photos.tsx` and `create-shift-modal.tsx` — replaced with role-neutral text.
 - **Lint fixes:** `useEffect` async calls wrapped with `void`, `<img>` elements in lightbox and job-reviews suppressed with eslint comments (external Supabase URLs, dimensions unknown).
 - **Job review bug fixes:** `handleMarkDone` now checks `res.ok` before updating UI; local state updated from full API response (includes `admin_notes` and `completed_at`).
@@ -371,3 +371,6 @@ npm run dev
 - **Approve/reject UI on booking detail page:** amber banner with thumbs up/down buttons visible when `booking.status === 'pending'` and viewer is admin/manager. Worker receives email on approval.
 - **`POST /api/bookings/create` updated:** saves `created_by`, resolves caller role, forces `pending` for workers, skips SMS for pending bookings.
 - **Job board cards are now clickable** — each card links to `/bookings/[id]` so workers can navigate directly from the kanban board to the booking.
+- **Role delegation guide on staff page:** collapsible panel on `/workers` explains each role's permissions and intended use case for Goran — Administratör (superadmin, full control), Admin (approve/reject bookings, delegated authority), Personal (submit bookings pending approval, default for all new accounts).
+- **Manager can approve/reject bookings:** confirmed that `manager` role has full access to approve/reject UI on dashboard (blue banner) and booking detail page (amber banner). API already enforced `admin | manager` check.
+- **Default role for new accounts:** all new employees created via the staff page default to `worker` (displayed as "Personal"). DB trigger (`handle_new_user`) also defaults to `worker` unless overridden by invite metadata.
