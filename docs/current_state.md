@@ -106,6 +106,7 @@ supabase/
     001_additive.sql                   # Additive: calendar_color, SMS columns, RLS fixes
     002_shifts.sql                     # ✅ Shifts table with RLS
     003_cleaning_jobs.sql              # ✅ cleaning_jobs + job_images tables with RLS
+    007_booking_worker_submit.sql      # ✅ created_by on bookings + worker INSERT policy (pending only)
 ```
 
 ---
@@ -132,6 +133,8 @@ supabase/
 4. `003_cleaning_jobs.sql`
 5. `004_admin_manage_profiles.sql` — admins can update/insert any profile row
 6. `005_bookings_admin_only.sql` — booking insert/update restricted to admin only (was admin+manager)
+7. `006_fix_profiles_policy_recursion.sql` — fixes RLS infinite recursion on profiles via security-definer helper
+8. `007_booking_worker_submit.sql` — adds `created_by`, opens booking INSERT to workers (pending status only)
 
 **Storage buckets (create manually in Supabase dashboard, set to public):**
 - `car-before-images`
@@ -294,6 +297,7 @@ Workers document their work directly from the booking detail page (`/bookings/[i
 | `/api/workers` | GET, POST | GET: `?all=true` includes inactive; POST: invite new employee via Supabase Auth |
 | `/api/workers/[id]` | PATCH | Update role or `is_active` — admin only, uses service client |
 | `/api/me` | GET | Current user's profile (id, role, full_name); returns dev stub when no session |
+| `/api/bookings/approve` | POST | Admin/manager approves or rejects a pending booking — triggers email to worker |
 
 ---
 
@@ -358,4 +362,12 @@ npm run dev
 - **Job documentation always visible:** `JobPhotos` section now shown for all non-cancelled bookings regardless of whether a worker is assigned. `workerId` prop made optional.
 - **Notes section disabled for non-admins:** Customer wishes and internal notes now have the same `pointerEvents/opacity` treatment as booking fields — no more editable-looking fields that can't be saved.
 - **"Tekniker" renamed to "Ansvarig"** across bookings table, detail panel, and calendar filter — reflects that admins and managers can also be assigned.
+
+### 2026-06-11
+- **Worker booking submission flow:** workers can now create bookings — status is forced to `pending`, admin gets notified. Migration `007_booking_worker_submit.sql` adds `created_by` column and opens INSERT to all authenticated users (workers locked to `pending` status only).
+- **Booking approval flow:** new `POST /api/bookings/approve` endpoint — admin/manager approves or rejects a pending booking. On approve: status → `confirmed`. On reject: status → `cancelled`. Email sent to the worker either way.
+- **Email notifications via Resend** (`src/lib/email/resend.ts`): placeholder architecture in place. `sendBookingSubmitted` (to admin), `sendBookingApproved` (to worker), `sendBookingRejected` (to worker). Currently logs to console — activate by setting `RESEND_API_KEY` in `.env.local`.
+- **Pending bookings banner** (`src/components/bookings/pending-bookings-banner.tsx`): shown on dashboard for admin/manager, same pattern as pending shifts banner. Blue color to distinguish from shifts (amber).
+- **Approve/reject UI on booking detail page:** amber banner with thumbs up/down buttons visible when `booking.status === 'pending'` and viewer is admin/manager. Worker receives email on approval.
+- **`POST /api/bookings/create` updated:** saves `created_by`, resolves caller role, forces `pending` for workers, skips SMS for pending bookings.
 - **Job board cards are now clickable** — each card links to `/bookings/[id]` so workers can navigate directly from the kanban board to the booking.

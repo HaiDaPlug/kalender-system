@@ -5,7 +5,7 @@ import { useParams, useRouter } from 'next/navigation'
 import Link from 'next/link'
 import {
   ArrowLeft, Car, User, Phone, Clock, Wrench,
-  MessageSquare, Loader2, Trash2, CheckCircle2, Save, History
+  MessageSquare, Loader2, Trash2, CheckCircle2, Save, History, ThumbsUp, ThumbsDown
 } from 'lucide-react'
 import type { Booking, BookingStatus } from '@/types'
 import { cn } from '@/lib/utils/cn'
@@ -45,11 +45,13 @@ export default function BookingDetailPage() {
   const [loading, setLoading]     = useState(true)
   const [saving, setSaving]       = useState(false)
   const [deleting, setDeleting]   = useState(false)
+  const [approving, setApproving] = useState(false)
   const [saved, setSaved]         = useState(false)
   const [error, setError]         = useState<string | null>(null)
 
-  // Only admin can edit/delete bookings — managers and workers are read-only for now
+  // Only admin can edit/delete bookings — managers and workers are read-only
   const canEdit = myRole === 'admin'
+  const canApprove = (myRole === 'admin' || myRole === 'manager') && booking?.status === 'pending'
 
   // Redigerbara fält
   const [status, setStatus]           = useState<BookingStatus>('confirmed')
@@ -128,6 +130,24 @@ export default function BookingDetailPage() {
       await fetchBooking()
     }
     setSaving(false)
+  }
+
+  async function handleApprove(action: 'approved' | 'rejected') {
+    if (!confirm(action === 'approved' ? 'Godkänn bokningen?' : 'Avvisa bokningen?')) return
+    setApproving(true)
+    setError(null)
+    const res = await fetch('/api/bookings/approve', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ bookingId: id, action }),
+    })
+    if (!res.ok) {
+      const d = await res.json()
+      setError(d.error ?? 'Kunde inte uppdatera bokningen')
+    } else {
+      await fetchBooking()
+    }
+    setApproving(false)
   }
 
   async function handleDelete() {
@@ -399,6 +419,34 @@ export default function BookingDetailPage() {
 
       {error && (
         <p className="text-xs text-red-500 bg-red-500/10 px-3 py-2 rounded">{error}</p>
+      )}
+
+      {/* Approve / reject — visible to admin/manager when booking is pending */}
+      {canApprove && (
+        <div className="rounded border border-amber-400/30 bg-amber-400/5 p-4 flex items-center justify-between gap-3">
+          <div>
+            <p className="text-sm font-medium text-amber-400">Bokning väntar på godkännande</p>
+            <p className="text-xs text-muted-foreground mt-0.5">Godkänn för att bekräfta — anställd får e-post</p>
+          </div>
+          <div className="flex gap-2 shrink-0">
+            <button
+              onClick={() => void handleApprove('rejected')}
+              disabled={approving}
+              className="flex items-center gap-1.5 px-3 py-1.5 text-sm rounded border border-red-500/30 text-red-400 hover:bg-red-500/10 disabled:opacity-40 transition-colors"
+            >
+              {approving ? <Loader2 className="h-3.5 w-3.5 animate-spin" /> : <ThumbsDown className="h-3.5 w-3.5" />}
+              Avvisa
+            </button>
+            <button
+              onClick={() => void handleApprove('approved')}
+              disabled={approving}
+              className="flex items-center gap-1.5 px-3 py-1.5 text-sm rounded bg-green-500/20 text-green-400 hover:bg-green-500/30 disabled:opacity-40 transition-colors font-medium"
+            >
+              {approving ? <Loader2 className="h-3.5 w-3.5 animate-spin" /> : <ThumbsUp className="h-3.5 w-3.5" />}
+              Godkänn
+            </button>
+          </div>
+        </div>
       )}
 
       {/* Save + delete — only visible to admin */}

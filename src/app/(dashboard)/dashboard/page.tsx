@@ -2,6 +2,7 @@ import { createClient } from '@/lib/supabase/server'
 import { DashboardStats } from '@/components/dashboard/dashboard-stats'
 import { RecentBookings } from '@/components/dashboard/recent-bookings'
 import { PendingShiftsBanner } from '@/components/shifts/pending-shifts-banner'
+import { PendingBookingsBanner } from '@/components/bookings/pending-bookings-banner'
 import type { Profile } from '@/types'
 
 // Dev placeholder — matches layout.tsx, removed once auth is enabled
@@ -30,7 +31,8 @@ export default async function DashboardPage() {
   return (
     <div className="space-y-5">
       <DashboardStats totalBookings={0} activeJobs={0} completedToday={0} />
-      {/* Only show pending shifts banner to admin/manager — workers should not see or act on others' shifts */}
+      {/* Only show pending banners to admin/manager */}
+      {isReviewer && <PendingBookingsBanner reviewerId={user ? profile.id : undefined} />}
       {isReviewer && <PendingShiftsBanner reviewerId={user ? profile.id : undefined} />}
       <RecentBookings bookings={[]} />
     </div>
