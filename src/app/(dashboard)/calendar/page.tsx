@@ -17,7 +17,7 @@ export default async function CalendarPage() {
   const [{ data: bookings }, { data: workers }] = await Promise.all([
     supabase
       .from('bookings')
-      .select('*, customer:customers(*), car:cars(*), assigned_worker:profiles(*), cleaning_job:cleaning_jobs(*)')
+      .select('*, customer:customers(*), car:cars(*), assigned_worker:profiles!bookings_assigned_worker_id_fkey(*), cleaning_job:cleaning_jobs(*)')
       .order('scheduled_at', { ascending: true }),
     supabase
       .from('profiles')
@@ -29,7 +29,7 @@ export default async function CalendarPage() {
   return (
     <div className="flex flex-col flex-1 min-h-0">
       <CalendarView
-        bookings={(bookings ?? []) as Booking[]}
+        bookings={(bookings ?? []) as unknown as Booking[]}
         workers={(workers ?? []) as Profile[]}
       />
     </div>

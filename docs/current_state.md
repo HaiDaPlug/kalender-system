@@ -22,7 +22,7 @@ Built specifically for Goran's and the workers' daily workflow, not a generic ca
 | Database / Auth | Supabase (Postgres + Auth) — Hai's project: `vsnbaylcgcksabwradgu` |
 | Image storage | Supabase Storage (buckets: `car-before-images`, `car-after-images`) |
 | GHL integration | HighLevel API v2 |
-| SMS | GHL Conversations API (ready for 46elks swap) |
+| SMS | 46elks (confirmation on booking approval) |
 | Font | DM Sans + DM Mono |
 | Animations | Framer Motion (installed, used for modal/panel transitions) |
 
@@ -56,6 +56,7 @@ src/
       my-shifts/page.tsx               # ✅ My shifts: add, search, view linked bookings
       jobs/page.tsx                    # ✅ Kanban board — fetches live data from /api/jobs
       admin/job-reviews/page.tsx       # ✅ Admin before/after photo review page (Goran only)
+      admin/sms-templates/page.tsx     # ✅ Admin SMS template editor — variable chips, GSM-7 part counter
       workers/page.tsx                 # ✅ Staff management — list all employees, change roles, activate/deactivate, add new
       settings/page.tsx                # Placeholder — not linked in sidebar
     api/
@@ -65,7 +66,7 @@ src/
       shifts/route.ts                  # ✅ GET filter shifts, POST create shift
       shifts/approve/route.ts          # ✅ POST approve/reject (requires admin/manager)
       customers/[id]/route.ts          # ✅ GET full customer profile, PATCH notes
-      sms/send/route.ts                # POST manual SMS via GHL
+      sms/send/route.ts                # POST manual SMS via 46elks (admin/manager only)
       webhooks/ghl/route.ts            # POST GHL appointment/contact sync
       jobs/route.ts                    # ✅ GET list (supports ?booking_id=), POST create job
       jobs/[id]/route.ts               # ✅ GET single job, PATCH status/notes
@@ -93,7 +94,7 @@ src/
       jobs-board.tsx                   # ✅ Kanban board component (4 columns by status) — cards link to /bookings/[id]
       job-photos.tsx                   # ✅ Before/after photo upload component for workers
     layout/
-      sidebar.tsx                      # Side menu: Översikt, Kalender, Mina pass, Jobb, Granskning*, Personal* (*admin/manager only)
+      sidebar.tsx                      # Side menu: Översikt, Kalender, Mina pass, Jobb, Granskning*, SMS-mallar**, Personal* (*admin/manager, **admin only)
       top-bar.tsx                      # Top bar with date, avatar, logout
       providers.tsx
     auth/login-form.tsx
@@ -122,7 +123,8 @@ supabase/
 | `shifts` | Work shifts — worker_id, starts_at, ends_at, status (pending/approved/rejected) |
 | `cleaning_jobs` | Job execution — one per booking, tracks status + timestamps |
 | `job_images` | Before/after photos — job_id, storage_path, public_url, type (before/after), uploaded_by |
-| `sms_logs` | SMS log with type, provider, delivery time |
+| `sms_logs` | SMS log with type, provider, delivery time. Status: pending/sent/delivered/failed/unknown |
+| `sms_templates` | Global SMS message templates — one active row enforced by partial unique index |
 | `activity_log` | Audit trail |
 | `highlevel_sync_logs` | Webhook log with idempotency |
 
@@ -135,6 +137,7 @@ supabase/
 6. `005_bookings_admin_only.sql` — booking insert/update restricted to admin only (was admin+manager)
 7. `006_fix_profiles_policy_recursion.sql` — fixes RLS infinite recursion on profiles via security-definer helper
 8. `007_booking_worker_submit.sql` — adds `created_by`, opens booking INSERT to workers (pending status only)
+9. `008_sms_templates.sql` — creates `sms_templates` table, adds `unknown` to `sms_logs` status constraint, seeds default confirmation template
 
 **Storage buckets (create manually in Supabase dashboard, set to public):**
 - `car-before-images`
@@ -195,7 +198,7 @@ Two exported components — pure CSS transitions, no spring physics:
 1. Click time in calendar → modal opens with time prefilled (15-min precision)
 2. Fill in: customer (name + phone required), car (make + model required), service, duration, status, worker, price, notes
 3. `POST /api/bookings/create` — creates customer (reuses if phone number exists) + car + booking
-4. SMS confirmation sent via GHL (requires `highlevel_contact_id` on the customer)
+4. SMS confirmation sent via 46elks (requires active template in `sms_templates`; skipped for worker-submitted pending bookings)
 5. Calendar reloads
 
 ---
@@ -289,7 +292,7 @@ Workers document their work directly from the booking detail page (`/bookings/[i
 | `/api/shifts` | GET, POST | Filters: worker_id, status, from, to |
 | `/api/shifts/approve` | POST | Approve/reject (admin/manager) |
 | `/api/customers/[id]` | GET, PATCH | Customer profile + history |
-| `/api/sms/send` | POST | Manual SMS via GHL |
+| `/api/sms/send` | POST | Manual SMS via 46elks (admin/manager only) |
 | `/api/webhooks/ghl` | POST | GHL sync |
 | `/api/jobs` | GET, POST | List jobs (`?booking_id=` filter), create job |
 | `/api/jobs/[id]` | GET, PATCH | Single job — status, notes, timestamps |
@@ -297,7 +300,8 @@ Workers document their work directly from the booking detail page (`/bookings/[i
 | `/api/workers` | GET, POST | GET: `?all=true` includes inactive; POST: invite new employee via Supabase Auth |
 | `/api/workers/[id]` | PATCH | Update role or `is_active` — admin only, uses service client |
 | `/api/me` | GET | Current user's profile (id, role, full_name); returns dev stub when no session |
-| `/api/bookings/approve` | POST | Admin/manager approves or rejects a pending booking — triggers email to worker |
+| `/api/bookings/approve` | POST | Admin/manager approves or rejects a pending booking — triggers email to worker + SMS to customer |
+| `/api/sms-templates` | GET, PATCH | GET: active template (auth required); PATCH: update body (admin only) |
 
 ---
 
@@ -307,8 +311,8 @@ Workers document their work directly from the booking detail page (`/bookings/[i
 |---|---|
 | Auth enabled (proxy.ts is passthrough) | **Before production** |
 | Storage bucket RLS policies | **Before production** |
-| SMS via 46elks (replace GHL) | High |
-| Auto-SMS on booking create (requires highlevel_contact_id) | High |
+| SMS via 46elks — wired up but not confirmed working end-to-end yet | **In progress** |
+| Auto-SMS on booking create (currently only fires on approval) | Medium |
 | Auto-SMS when car is ready | High |
 | Dashboard stats with real data (totalBookings, activeJobs, completedToday) | Medium |
 | Recent bookings on dashboard with real data | Medium |
@@ -374,3 +378,16 @@ npm run dev
 - **Role delegation guide on staff page:** collapsible panel on `/workers` explains each role's permissions and intended use case for Goran — Administratör (superadmin, full control), Admin (approve/reject bookings, delegated authority), Personal (submit bookings pending approval, default for all new accounts).
 - **Manager can approve/reject bookings:** confirmed that `manager` role has full access to approve/reject UI on dashboard (blue banner) and booking detail page (amber banner). API already enforced `admin | manager` check.
 - **Default role for new accounts:** all new employees created via the staff page default to `worker` (displayed as "Personal"). DB trigger (`handle_new_user`) also defaults to `worker` unless overridden by invite metadata.
+
+### 2026-06-11 (SMS + fixes)
+- **46elks SMS integration:** `src/lib/sms/46elks.ts` (server-only wrapper) sends confirmation SMS to customer when a booking is approved. Basic auth, E.164 phone normalisation, 10s timeout. Falls back to `console.log` if credentials not set.
+- **SMS template system:** `sms_templates` table (migration `008`) with a single active row enforced by partial unique index. Default template seeded: `Hej {name}, din bokning för {service} är bekräftad den {date} kl {time}. Välkommen!`
+- **SMS templates admin page** (`/admin/sms-templates`): textarea with cursor-aware variable insertion chips (`{name}`, `{service}`, `{date}`, `{time}`), GSM-7/Unicode part counter, last-modified timestamp. Admin-only (not visible to managers).
+- **Duplicate SMS guard:** `sms_logs` row inserted as `pending` before sending — unique index on `(booking_id, sms_type)` blocks retries. On 23505: stale pending rows (>5 min) are marked `unknown` (delivery ambiguous, manual check required) rather than auto-resent to prevent duplicate texts.
+- **`sms_logs.status` extended:** added `unknown` value for the ambiguous crash-after-send case. Migration 008 drops and re-adds the check constraint. `SmsStatus` type updated.
+- **Stockholm timezone:** date/time in SMS messages use `timeZone: 'Europe/Stockholm'` — server runtime UTC no longer causes wrong appointment times.
+- **Booking create RLS fix:** `POST /api/bookings/create` switched from `createRawClient` (session-based, breaks without middleware) to `createServiceClient` (bypasses RLS) — fixes "new row violates RLS policy for customers" error in dev.
+- **SMS templates API dev bypass:** `GET /api/sms-templates` now allows unauthenticated access in `NODE_ENV=development`, matching the pattern used by other API routes.
+- **TypeScript:** `calendar/page.tsx` cast updated to `as unknown as Booking[]` after regenerated types exposed `cleaning_job` shape mismatch. Database types regenerated post-migration-008.
+- **`sms-parts.ts`** (`src/lib/sms/sms-parts.ts`): client-safe GSM-7/Unicode SMS part calculator. Swedish å/ä/ö correctly treated as GSM-7 basic (1 septet each); extended chars (^, {, }, €, etc.) count as 2.
+- **⚠️ SMS not yet confirmed working end-to-end** — booking creation now works, approval flow wired, but live SMS delivery to phone not yet verified.

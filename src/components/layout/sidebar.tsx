@@ -11,6 +11,7 @@ import {
   Briefcase,
   CalendarClock,
   ScanEye,
+  MessageSquare,
 } from 'lucide-react'
 
 const NAV = [
@@ -18,8 +19,9 @@ const NAV = [
   { href: '/calendar',           label: 'Kalender',      icon: CalendarDays },
   { href: '/my-shifts',          label: 'Mina pass',     icon: CalendarClock },
   { href: '/jobs',               label: 'Jobb',          icon: Briefcase },
-  { href: '/admin/job-reviews',  label: 'Granskning',    icon: ScanEye, adminOnly: true },
-  { href: '/workers',            label: 'Personal',      icon: Users, adminOnly: true },
+  { href: '/admin/job-reviews',   label: 'Granskning',  icon: ScanEye,        adminOnly: true },
+  { href: '/admin/sms-templates', label: 'SMS-mallar',  icon: MessageSquare,  adminOnly: true, adminStrictOnly: true },
+  { href: '/workers',             label: 'Personal',    icon: Users,          adminOnly: true },
 ]
 
 const ROLE_LABELS: Record<string, string> = {
@@ -31,9 +33,11 @@ const ROLE_LABELS: Record<string, string> = {
 export function Sidebar({ profile }: { profile: Profile | null }) {
   const pathname = usePathname()
 
-  const visible = NAV.filter(
-    item => !item.adminOnly || profile?.role === 'admin' || profile?.role === 'manager'
-  )
+  const visible = NAV.filter(item => {
+    if (item.adminStrictOnly) return profile?.role === 'admin'
+    if (item.adminOnly) return profile?.role === 'admin' || profile?.role === 'manager'
+    return true
+  })
 
   const isActive = (href: string) =>
     href === '/dashboard' ? pathname === href : pathname.startsWith(href)

@@ -1,237 +1,697 @@
-// Auto-generate the real version with:
-// npx supabase gen types typescript --project-id YOUR_PROJECT_ID > src/types/database.ts
-// This stub satisfies TypeScript until you run the generator.
-
-type Json = string | number | boolean | null | { [key: string]: Json } | Json[]
+export type Json =
+  | string
+  | number
+  | boolean
+  | null
+  | { [key: string]: Json | undefined }
+  | Json[]
 
 export type Database = {
+  // Allows to automatically instantiate createClient with right options
+  // instead of createClient<Database, { PostgrestVersion: 'XX' }>(URL, KEY)
+  __InternalSupabase: {
+    PostgrestVersion: "14.5"
+  }
   public: {
     Tables: {
-      profiles: {
+      activity_log: {
         Row: {
-          id: string
-          email: string
-          full_name: string
-          phone: string | null
-          role: 'admin' | 'manager' | 'worker'
-          avatar_url: string | null
-          is_active: boolean
+          action: string
+          actor_id: string | null
           created_at: string
-          updated_at: string
+          entity_id: string
+          entity_type: string
+          id: string
+          metadata: Json | null
         }
         Insert: {
-          id: string
-          email: string
-          full_name: string
-          phone?: string | null
-          role?: 'admin' | 'manager' | 'worker'
-          avatar_url?: string | null
-          is_active?: boolean
+          action: string
+          actor_id?: string | null
           created_at?: string
-          updated_at?: string
-        }
-        Update: Partial<Database['public']['Tables']['profiles']['Insert']>
-      }
-      customers: {
-        Row: {
-          id: string
-          full_name: string
-          email: string | null
-          phone: string
-          address: string | null
-          notes: string | null
-          highlevel_contact_id: string | null
-          created_at: string
-          updated_at: string
-        }
-        Insert: {
+          entity_id: string
+          entity_type: string
           id?: string
-          full_name: string
-          email?: string | null
-          phone: string
-          address?: string | null
-          notes?: string | null
-          highlevel_contact_id?: string | null
+          metadata?: Json | null
+        }
+        Update: {
+          action?: string
+          actor_id?: string | null
           created_at?: string
-          updated_at?: string
-        }
-        Update: Partial<Database['public']['Tables']['customers']['Insert']>
-      }
-      cars: {
-        Row: {
-          id: string
-          customer_id: string
-          make: string
-          model: string
-          year: number | null
-          color: string | null
-          license_plate: string | null
-          vin: string | null
-          notes: string | null
-          created_at: string
-          updated_at: string
-        }
-        Insert: {
+          entity_id?: string
+          entity_type?: string
           id?: string
-          customer_id: string
-          make: string
-          model: string
-          year?: number | null
-          color?: string | null
-          license_plate?: string | null
-          vin?: string | null
-          notes?: string | null
-          created_at?: string
-          updated_at?: string
+          metadata?: Json | null
         }
-        Update: Partial<Database['public']['Tables']['cars']['Insert']>
+        Relationships: [
+          {
+            foreignKeyName: "activity_log_actor_id_fkey"
+            columns: ["actor_id"]
+            isOneToOne: false
+            referencedRelation: "profiles"
+            referencedColumns: ["id"]
+          },
+        ]
       }
       bookings: {
         Row: {
-          id: string
-          customer_id: string
-          car_id: string
           assigned_worker_id: string | null
-          status: 'pending' | 'confirmed' | 'in_progress' | 'completed' | 'cancelled'
-          scheduled_at: string
-          estimated_duration_minutes: number
-          service_type: string
-          service_notes: string | null
+          calendar_color: string | null
+          car_id: string
+          created_at: string
+          created_by: string | null
+          customer_id: string
           customer_notes: string | null
-          location_address: string | null
-          total_price: number | null
+          estimated_duration_minutes: number
           highlevel_appointment_id: string | null
           highlevel_calendar_id: string | null
+          id: string
+          location_address: string | null
+          scheduled_at: string
+          service_notes: string | null
+          service_type: string
           sms_confirmation_sent: boolean
-          created_at: string
+          sms_ready_for_pickup_sent: boolean
+          status: string
+          total_price: number | null
           updated_at: string
         }
         Insert: {
-          id?: string
-          customer_id: string
-          car_id: string
           assigned_worker_id?: string | null
-          status?: 'pending' | 'confirmed' | 'in_progress' | 'completed' | 'cancelled'
-          scheduled_at: string
-          estimated_duration_minutes?: number
-          service_type: string
-          service_notes?: string | null
+          calendar_color?: string | null
+          car_id: string
+          created_at?: string
+          created_by?: string | null
+          customer_id: string
           customer_notes?: string | null
-          location_address?: string | null
-          total_price?: number | null
+          estimated_duration_minutes?: number
           highlevel_appointment_id?: string | null
           highlevel_calendar_id?: string | null
+          id?: string
+          location_address?: string | null
+          scheduled_at: string
+          service_notes?: string | null
+          service_type: string
           sms_confirmation_sent?: boolean
-          created_at?: string
+          sms_ready_for_pickup_sent?: boolean
+          status?: string
+          total_price?: number | null
           updated_at?: string
         }
-        Update: Partial<Database['public']['Tables']['bookings']['Insert']>
+        Update: {
+          assigned_worker_id?: string | null
+          calendar_color?: string | null
+          car_id?: string
+          created_at?: string
+          created_by?: string | null
+          customer_id?: string
+          customer_notes?: string | null
+          estimated_duration_minutes?: number
+          highlevel_appointment_id?: string | null
+          highlevel_calendar_id?: string | null
+          id?: string
+          location_address?: string | null
+          scheduled_at?: string
+          service_notes?: string | null
+          service_type?: string
+          sms_confirmation_sent?: boolean
+          sms_ready_for_pickup_sent?: boolean
+          status?: string
+          total_price?: number | null
+          updated_at?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "bookings_assigned_worker_id_fkey"
+            columns: ["assigned_worker_id"]
+            isOneToOne: false
+            referencedRelation: "profiles"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "bookings_car_id_fkey"
+            columns: ["car_id"]
+            isOneToOne: false
+            referencedRelation: "cars"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "bookings_created_by_fkey"
+            columns: ["created_by"]
+            isOneToOne: false
+            referencedRelation: "profiles"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "bookings_customer_id_fkey"
+            columns: ["customer_id"]
+            isOneToOne: false
+            referencedRelation: "customers"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      cars: {
+        Row: {
+          color: string | null
+          created_at: string
+          customer_id: string
+          id: string
+          license_plate: string | null
+          make: string
+          model: string
+          notes: string | null
+          updated_at: string
+          vin: string | null
+          year: number | null
+        }
+        Insert: {
+          color?: string | null
+          created_at?: string
+          customer_id: string
+          id?: string
+          license_plate?: string | null
+          make: string
+          model: string
+          notes?: string | null
+          updated_at?: string
+          vin?: string | null
+          year?: number | null
+        }
+        Update: {
+          color?: string | null
+          created_at?: string
+          customer_id?: string
+          id?: string
+          license_plate?: string | null
+          make?: string
+          model?: string
+          notes?: string | null
+          updated_at?: string
+          vin?: string | null
+          year?: number | null
+        }
+        Relationships: [
+          {
+            foreignKeyName: "cars_customer_id_fkey"
+            columns: ["customer_id"]
+            isOneToOne: false
+            referencedRelation: "customers"
+            referencedColumns: ["id"]
+          },
+        ]
       }
       cleaning_jobs: {
         Row: {
-          id: string
-          booking_id: string
-          worker_id: string
-          status: 'not_started' | 'in_progress' | 'completed' | 'needs_review'
-          started_at: string | null
-          completed_at: string | null
-          worker_notes: string | null
           admin_notes: string | null
+          booking_id: string
+          completed_at: string | null
           created_at: string
+          id: string
+          started_at: string | null
+          status: string
+          updated_at: string
+          worker_id: string
+          worker_notes: string | null
+        }
+        Insert: {
+          admin_notes?: string | null
+          booking_id: string
+          completed_at?: string | null
+          created_at?: string
+          id?: string
+          started_at?: string | null
+          status?: string
+          updated_at?: string
+          worker_id: string
+          worker_notes?: string | null
+        }
+        Update: {
+          admin_notes?: string | null
+          booking_id?: string
+          completed_at?: string | null
+          created_at?: string
+          id?: string
+          started_at?: string | null
+          status?: string
+          updated_at?: string
+          worker_id?: string
+          worker_notes?: string | null
+        }
+        Relationships: [
+          {
+            foreignKeyName: "cleaning_jobs_booking_id_fkey"
+            columns: ["booking_id"]
+            isOneToOne: true
+            referencedRelation: "bookings"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "cleaning_jobs_worker_id_fkey"
+            columns: ["worker_id"]
+            isOneToOne: false
+            referencedRelation: "profiles"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      customers: {
+        Row: {
+          address: string | null
+          created_at: string
+          email: string | null
+          full_name: string
+          highlevel_contact_id: string | null
+          id: string
+          notes: string | null
+          phone: string
           updated_at: string
         }
         Insert: {
-          id?: string
-          booking_id: string
-          worker_id: string
-          status?: 'not_started' | 'in_progress' | 'completed' | 'needs_review'
-          started_at?: string | null
-          completed_at?: string | null
-          worker_notes?: string | null
-          admin_notes?: string | null
+          address?: string | null
           created_at?: string
+          email?: string | null
+          full_name: string
+          highlevel_contact_id?: string | null
+          id?: string
+          notes?: string | null
+          phone: string
           updated_at?: string
         }
-        Update: Partial<Database['public']['Tables']['cleaning_jobs']['Insert']>
-      }
-      job_images: {
-        Row: {
-          id: string
-          job_id: string
-          storage_path: string
-          public_url: string
-          type: 'before' | 'after'
-          uploaded_by: string
-          file_size_bytes: number | null
-          created_at: string
-        }
-        Insert: {
-          id?: string
-          job_id: string
-          storage_path: string
-          public_url: string
-          type: 'before' | 'after'
-          uploaded_by: string
-          file_size_bytes?: number | null
+        Update: {
+          address?: string | null
           created_at?: string
-        }
-        Update: Partial<Database['public']['Tables']['job_images']['Insert']>
-      }
-      sms_logs: {
-        Row: {
-          id: string
-          booking_id: string | null
-          customer_id: string
-          phone_number: string
-          message_body: string
-          status: 'pending' | 'sent' | 'delivered' | 'failed'
-          highlevel_message_id: string | null
-          sent_at: string | null
-          error_message: string | null
-          created_at: string
-        }
-        Insert: {
+          email?: string | null
+          full_name?: string
+          highlevel_contact_id?: string | null
           id?: string
-          booking_id?: string | null
-          customer_id: string
-          phone_number: string
-          message_body: string
-          status?: 'pending' | 'sent' | 'delivered' | 'failed'
-          highlevel_message_id?: string | null
-          sent_at?: string | null
-          error_message?: string | null
-          created_at?: string
+          notes?: string | null
+          phone?: string
+          updated_at?: string
         }
-        Update: Partial<Database['public']['Tables']['sms_logs']['Insert']>
+        Relationships: []
       }
       highlevel_sync_logs: {
         Row: {
-          id: string
-          entity_type: 'booking' | 'customer' | 'contact'
+          action: string
+          created_at: string
           entity_id: string
+          entity_type: string
+          error_message: string | null
           highlevel_id: string | null
-          action: 'create' | 'update' | 'delete' | 'webhook_received'
+          id: string
           payload: Json | null
           success: boolean
-          error_message: string | null
-          created_at: string
         }
         Insert: {
-          id?: string
-          entity_type: 'booking' | 'customer' | 'contact'
+          action: string
+          created_at?: string
           entity_id: string
+          entity_type: string
+          error_message?: string | null
           highlevel_id?: string | null
-          action: 'create' | 'update' | 'delete' | 'webhook_received'
+          id?: string
           payload?: Json | null
           success?: boolean
-          error_message?: string | null
-          created_at?: string
         }
-        Update: Partial<Database['public']['Tables']['highlevel_sync_logs']['Insert']>
+        Update: {
+          action?: string
+          created_at?: string
+          entity_id?: string
+          entity_type?: string
+          error_message?: string | null
+          highlevel_id?: string | null
+          id?: string
+          payload?: Json | null
+          success?: boolean
+        }
+        Relationships: []
+      }
+      job_images: {
+        Row: {
+          created_at: string
+          file_size_bytes: number | null
+          id: string
+          job_id: string
+          public_url: string
+          storage_path: string
+          type: string
+          uploaded_by: string
+        }
+        Insert: {
+          created_at?: string
+          file_size_bytes?: number | null
+          id?: string
+          job_id: string
+          public_url: string
+          storage_path: string
+          type: string
+          uploaded_by: string
+        }
+        Update: {
+          created_at?: string
+          file_size_bytes?: number | null
+          id?: string
+          job_id?: string
+          public_url?: string
+          storage_path?: string
+          type?: string
+          uploaded_by?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "job_images_job_id_fkey"
+            columns: ["job_id"]
+            isOneToOne: false
+            referencedRelation: "cleaning_jobs"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "job_images_uploaded_by_fkey"
+            columns: ["uploaded_by"]
+            isOneToOne: false
+            referencedRelation: "profiles"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      profiles: {
+        Row: {
+          avatar_url: string | null
+          created_at: string
+          email: string
+          full_name: string
+          id: string
+          is_active: boolean
+          phone: string | null
+          role: string
+          updated_at: string
+        }
+        Insert: {
+          avatar_url?: string | null
+          created_at?: string
+          email: string
+          full_name: string
+          id: string
+          is_active?: boolean
+          phone?: string | null
+          role?: string
+          updated_at?: string
+        }
+        Update: {
+          avatar_url?: string | null
+          created_at?: string
+          email?: string
+          full_name?: string
+          id?: string
+          is_active?: boolean
+          phone?: string | null
+          role?: string
+          updated_at?: string
+        }
+        Relationships: []
+      }
+      shifts: {
+        Row: {
+          created_at: string
+          ends_at: string
+          id: string
+          notes: string | null
+          reviewed_at: string | null
+          reviewed_by: string | null
+          starts_at: string
+          status: string
+          updated_at: string
+          worker_id: string
+        }
+        Insert: {
+          created_at?: string
+          ends_at: string
+          id?: string
+          notes?: string | null
+          reviewed_at?: string | null
+          reviewed_by?: string | null
+          starts_at: string
+          status?: string
+          updated_at?: string
+          worker_id: string
+        }
+        Update: {
+          created_at?: string
+          ends_at?: string
+          id?: string
+          notes?: string | null
+          reviewed_at?: string | null
+          reviewed_by?: string | null
+          starts_at?: string
+          status?: string
+          updated_at?: string
+          worker_id?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "shifts_reviewed_by_fkey"
+            columns: ["reviewed_by"]
+            isOneToOne: false
+            referencedRelation: "profiles"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "shifts_worker_id_fkey"
+            columns: ["worker_id"]
+            isOneToOne: false
+            referencedRelation: "profiles"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      sms_logs: {
+        Row: {
+          booking_id: string | null
+          created_at: string
+          customer_id: string
+          delivery_callback_at: string | null
+          error_message: string | null
+          highlevel_message_id: string | null
+          id: string
+          message_body: string
+          phone_number: string
+          provider: string
+          provider_message_id: string | null
+          sent_at: string | null
+          sms_type: string
+          status: string
+        }
+        Insert: {
+          booking_id?: string | null
+          created_at?: string
+          customer_id: string
+          delivery_callback_at?: string | null
+          error_message?: string | null
+          highlevel_message_id?: string | null
+          id?: string
+          message_body: string
+          phone_number: string
+          provider?: string
+          provider_message_id?: string | null
+          sent_at?: string | null
+          sms_type?: string
+          status?: string
+        }
+        Update: {
+          booking_id?: string | null
+          created_at?: string
+          customer_id?: string
+          delivery_callback_at?: string | null
+          error_message?: string | null
+          highlevel_message_id?: string | null
+          id?: string
+          message_body?: string
+          phone_number?: string
+          provider?: string
+          provider_message_id?: string | null
+          sent_at?: string | null
+          sms_type?: string
+          status?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "sms_logs_booking_id_fkey"
+            columns: ["booking_id"]
+            isOneToOne: false
+            referencedRelation: "bookings"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "sms_logs_customer_id_fkey"
+            columns: ["customer_id"]
+            isOneToOne: false
+            referencedRelation: "customers"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      sms_templates: {
+        Row: {
+          body: string
+          created_at: string
+          id: string
+          is_active: boolean
+          name: string
+          updated_at: string
+        }
+        Insert: {
+          body: string
+          created_at?: string
+          id?: string
+          is_active?: boolean
+          name: string
+          updated_at?: string
+        }
+        Update: {
+          body?: string
+          created_at?: string
+          id?: string
+          is_active?: boolean
+          name?: string
+          updated_at?: string
+        }
+        Relationships: []
       }
     }
-    Views: Record<string, never>
-    Functions: Record<string, never>
-    Enums: Record<string, never>
+    Views: {
+      [_ in never]: never
+    }
+    Functions: {
+      [_ in never]: never
+    }
+    Enums: {
+      [_ in never]: never
+    }
+    CompositeTypes: {
+      [_ in never]: never
+    }
   }
 }
+
+type DatabaseWithoutInternals = Omit<Database, "__InternalSupabase">
+
+type DefaultSchema = DatabaseWithoutInternals[Extract<keyof Database, "public">]
+
+export type Tables<
+  DefaultSchemaTableNameOrOptions extends
+    | keyof (DefaultSchema["Tables"] & DefaultSchema["Views"])
+    | { schema: keyof DatabaseWithoutInternals },
+  TableName extends DefaultSchemaTableNameOrOptions extends {
+    schema: keyof DatabaseWithoutInternals
+  }
+    ? keyof (DatabaseWithoutInternals[DefaultSchemaTableNameOrOptions["schema"]]["Tables"] &
+        DatabaseWithoutInternals[DefaultSchemaTableNameOrOptions["schema"]]["Views"])
+    : never = never,
+> = DefaultSchemaTableNameOrOptions extends {
+  schema: keyof DatabaseWithoutInternals
+}
+  ? (DatabaseWithoutInternals[DefaultSchemaTableNameOrOptions["schema"]]["Tables"] &
+      DatabaseWithoutInternals[DefaultSchemaTableNameOrOptions["schema"]]["Views"])[TableName] extends {
+      Row: infer R
+    }
+    ? R
+    : never
+  : DefaultSchemaTableNameOrOptions extends keyof (DefaultSchema["Tables"] &
+        DefaultSchema["Views"])
+    ? (DefaultSchema["Tables"] &
+        DefaultSchema["Views"])[DefaultSchemaTableNameOrOptions] extends {
+        Row: infer R
+      }
+      ? R
+      : never
+    : never
+
+export type TablesInsert<
+  DefaultSchemaTableNameOrOptions extends
+    | keyof DefaultSchema["Tables"]
+    | { schema: keyof DatabaseWithoutInternals },
+  TableName extends DefaultSchemaTableNameOrOptions extends {
+    schema: keyof DatabaseWithoutInternals
+  }
+    ? keyof DatabaseWithoutInternals[DefaultSchemaTableNameOrOptions["schema"]]["Tables"]
+    : never = never,
+> = DefaultSchemaTableNameOrOptions extends {
+  schema: keyof DatabaseWithoutInternals
+}
+  ? DatabaseWithoutInternals[DefaultSchemaTableNameOrOptions["schema"]]["Tables"][TableName] extends {
+      Insert: infer I
+    }
+    ? I
+    : never
+  : DefaultSchemaTableNameOrOptions extends keyof DefaultSchema["Tables"]
+    ? DefaultSchema["Tables"][DefaultSchemaTableNameOrOptions] extends {
+        Insert: infer I
+      }
+      ? I
+      : never
+    : never
+
+export type TablesUpdate<
+  DefaultSchemaTableNameOrOptions extends
+    | keyof DefaultSchema["Tables"]
+    | { schema: keyof DatabaseWithoutInternals },
+  TableName extends DefaultSchemaTableNameOrOptions extends {
+    schema: keyof DatabaseWithoutInternals
+  }
+    ? keyof DatabaseWithoutInternals[DefaultSchemaTableNameOrOptions["schema"]]["Tables"]
+    : never = never,
+> = DefaultSchemaTableNameOrOptions extends {
+  schema: keyof DatabaseWithoutInternals
+}
+  ? DatabaseWithoutInternals[DefaultSchemaTableNameOrOptions["schema"]]["Tables"][TableName] extends {
+      Update: infer U
+    }
+    ? U
+    : never
+  : DefaultSchemaTableNameOrOptions extends keyof DefaultSchema["Tables"]
+    ? DefaultSchema["Tables"][DefaultSchemaTableNameOrOptions] extends {
+        Update: infer U
+      }
+      ? U
+      : never
+    : never
+
+export type Enums<
+  DefaultSchemaEnumNameOrOptions extends
+    | keyof DefaultSchema["Enums"]
+    | { schema: keyof DatabaseWithoutInternals },
+  EnumName extends DefaultSchemaEnumNameOrOptions extends {
+    schema: keyof DatabaseWithoutInternals
+  }
+    ? keyof DatabaseWithoutInternals[DefaultSchemaEnumNameOrOptions["schema"]]["Enums"]
+    : never = never,
+> = DefaultSchemaEnumNameOrOptions extends {
+  schema: keyof DatabaseWithoutInternals
+}
+  ? DatabaseWithoutInternals[DefaultSchemaEnumNameOrOptions["schema"]]["Enums"][EnumName]
+  : DefaultSchemaEnumNameOrOptions extends keyof DefaultSchema["Enums"]
+    ? DefaultSchema["Enums"][DefaultSchemaEnumNameOrOptions]
+    : never
+
+export type CompositeTypes<
+  PublicCompositeTypeNameOrOptions extends
+    | keyof DefaultSchema["CompositeTypes"]
+    | { schema: keyof DatabaseWithoutInternals },
+  CompositeTypeName extends PublicCompositeTypeNameOrOptions extends {
+    schema: keyof DatabaseWithoutInternals
+  }
+    ? keyof DatabaseWithoutInternals[PublicCompositeTypeNameOrOptions["schema"]]["CompositeTypes"]
+    : never = never,
+> = PublicCompositeTypeNameOrOptions extends {
+  schema: keyof DatabaseWithoutInternals
+}
+  ? DatabaseWithoutInternals[PublicCompositeTypeNameOrOptions["schema"]]["CompositeTypes"][CompositeTypeName]
+  : PublicCompositeTypeNameOrOptions extends keyof DefaultSchema["CompositeTypes"]
+    ? DefaultSchema["CompositeTypes"][PublicCompositeTypeNameOrOptions]
+    : never
+
+export const Constants = {
+  public: {
+    Enums: {},
+  },
+} as const

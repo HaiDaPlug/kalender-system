@@ -1,8 +1,8 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { createClient } from '@/lib/supabase/server'
-import { createRawClient } from '@/lib/supabase/server-raw'
-import { ghlConversations } from '@/lib/gohighlevel/client'
+import { createServiceClient } from '@/lib/supabase/service'
 import { sendBookingSubmitted } from '@/lib/email/resend'
+import { sendBookingConfirmedSms } from '@/lib/sms/46elks'
 
 /*
   POST /api/bookings/create
@@ -10,9 +10,13 @@ import { sendBookingSubmitted } from '@/lib/email/resend'
   If the caller is a worker, status is forced to 'pending' and an approval email is sent to the admin.
 */
 export async function POST(request: NextRequest) {
-  const supabase = await createRawClient()
   const sessionClient = await createClient()
   const { data: { user } } = await sessionClient.auth.getUser()
+
+  const isDev = process.env.NODE_ENV === 'development'
+  if (!user && !isDev) {
+    return NextResponse.json({ error: 'Unauthorized' }, { status: 401 })
+  }
 
   const body = await request.json()
   const {
@@ -49,7 +53,9 @@ export async function POST(request: NextRequest) {
     if (data) callerProfile = data
   }
 
-  const isWorker = !['admin', 'manager'].includes(callerProfile?.role ?? 'admin')
+  const supabase = createServiceClient()
+
+  const isWorker = !['admin', 'manager'].includes(callerProfile?.role ?? (isDev ? 'admin' : 'worker'))
   const finalStatus: string = isWorker ? 'pending' : (status ?? 'confirmed')
 
   // 1. Kund — återanvänd om telefonnummer redan finns
@@ -139,48 +145,82 @@ export async function POST(request: NextRequest) {
   // 5. SMS confirmation — only for admin/manager-created confirmed bookings
   // Workers' pending bookings are not confirmed yet so no SMS is sent
   let smsSent = false
-  try {
-    const date = new Date(scheduledAt)
-    const dateStr = date.toLocaleDateString('sv-SE', { weekday: 'long', day: 'numeric', month: 'long' })
-    const timeStr = date.toLocaleTimeString('sv-SE', { hour: '2-digit', minute: '2-digit' })
+  if (!isWorker && finalStatus === 'confirmed') {
+    console.log(`[sms:create] booking=${booking.id} — starting SMS flow`)
+    await (async () => {
+      // eslint-disable-next-line @typescript-eslint/no-explicit-any
+      const { data: template, error: templateErr } = await (supabase as any)
+        .from('sms_templates')
+        .select('body')
+        .eq('is_active', true)
+        .limit(1)
+        .maybeSingle()
 
-    const message = `Hej ${customerName}! Din bokning är bekräftad: ${serviceType} ${dateStr} kl ${timeStr}. Välkommen!`
+      if (templateErr) {
+        console.error('[sms:create] Template fetch error:', templateErr.message)
+        return
+      }
+      if (!template?.body) {
+        console.warn('[sms:create] No active template configured — skipping SMS')
+        return
+      }
+      console.log('[sms:create] Template found, inserting sms_log...')
 
-    // Hämta GHL contact ID om kunden finns i HighLevel
-    const { data: customerData } = await supabase
-      .from('customers')
-      .select('highlevel_contact_id')
-      .eq('id', customerId)
-      .single()
+      // eslint-disable-next-line @typescript-eslint/no-explicit-any
+      const { data: logRow, error: logErr } = await (supabase as any)
+        .from('sms_logs')
+        .insert({
+          booking_id:   booking.id,
+          customer_id:  customerId,
+          phone_number: customerPhone as string,
+          message_body: template.body,
+          sms_type:     'confirmation',
+          provider:     '46elks',
+          status:       'pending',
+        })
+        .select('id')
+        .single()
 
-    if (customerData?.highlevel_contact_id && process.env.GHL_LOCATION_ID) {
-      await ghlConversations.sendMessage({
-        type: 'SMS',
-        contactId: customerData.highlevel_contact_id,
-        locationId: process.env.GHL_LOCATION_ID,
-        message,
-      })
+      if (logErr || !logRow) {
+        console.error('[sms:create] Failed to insert sms_log:', logErr?.message)
+        return
+      }
+      console.log(`[sms:create] sms_log inserted id=${(logRow as { id: string }).id}, calling 46elks...`)
 
-      await supabase.from('sms_logs').insert({
-        booking_id: booking.id,
-        customer_id: customerId,
-        phone_number: customerPhone,
-        message_body: message,
-        sms_type: 'confirmation',
-        status: 'sent',
-        provider: 'highlevel',
-        sent_at: new Date().toISOString(),
-      })
+      const result = await sendBookingConfirmedSms(
+        {
+          phone:        customerPhone as string,
+          customerName: customerName as string,
+          serviceType:  serviceType as string,
+          scheduledAt:  scheduledAt as string,
+        },
+        template.body,
+      )
+      console.log(`[sms:create] 46elks result: sent=${result.sent} messageId=${result.messageId} error=${result.error}`)
 
-      await supabase
-        .from('bookings')
-        .update({ sms_confirmation_sent: true })
-        .eq('id', booking.id)
+      // eslint-disable-next-line @typescript-eslint/no-explicit-any
+      await (supabase as any)
+        .from('sms_logs')
+        .update({
+          message_body:        result.message || template.body,
+          status:              result.sent ? 'sent' : 'failed',
+          provider_message_id: result.messageId ?? null,
+          sent_at:             result.sent ? new Date().toISOString() : null,
+          error_message:       result.error ?? null,
+        })
+        .eq('id', (logRow as { id: string }).id)
 
-      smsSent = true
-    }
-  } catch {
-    // SMS-fel stoppar inte bokningen — logga tyst
+      if (result.sent) {
+        // eslint-disable-next-line @typescript-eslint/no-explicit-any
+        await (supabase as any)
+          .from('bookings')
+          .update({ sms_confirmation_sent: true })
+          .eq('id', booking.id)
+        smsSent = true
+      }
+    })()
+  } else {
+    console.log(`[sms:create] booking=${booking.id} — SMS skipped (isWorker=${isWorker} status=${finalStatus})`)
   }
 
   return NextResponse.json({ bookingId: booking.id, smsSent }, { status: 201 })

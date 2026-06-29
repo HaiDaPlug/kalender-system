@@ -137,7 +137,7 @@ create table if not exists sms_logs (
   sms_type              text not null default 'manual'
                           check (sms_type in ('confirmation', 'ready_for_pickup', 'manual')),
   status                text not null default 'pending'
-                          check (status in ('pending','sent','delivered','failed')),
+                          check (status in ('pending','sent','delivered','failed','unknown')),
   provider              text not null default 'highlevel'
                           check (provider in ('highlevel', '46elks', 'twilio')),
   highlevel_message_id  text,
@@ -154,6 +154,29 @@ create unique index if not exists sms_logs_booking_type_sent_idx
   on sms_logs(booking_id, sms_type)
   where sms_type in ('confirmation', 'ready_for_pickup')
     and status not in ('failed');
+
+-- ── SMS Templates ─────────────────────────────────────────────────────────
+create table if not exists sms_templates (
+  id         uuid primary key default uuid_generate_v4(),
+  name       text not null unique,
+  body       text not null,
+  is_active  boolean not null default false,
+  created_at timestamptz not null default now(),
+  updated_at timestamptz not null default now()
+);
+
+-- At most one active template
+create unique index if not exists sms_templates_single_active_idx
+  on sms_templates (is_active)
+  where is_active = true;
+
+insert into sms_templates (name, body, is_active)
+values (
+  'Bokningsbekräftelse',
+  'Hej {name}, din bokning för {service} är bekräftad den {date} kl {time}. Välkommen!',
+  true
+)
+on conflict (name) do nothing;
 
 -- ── Activity Log ──────────────────────────────────────────────────────────
 create table if not exists activity_log (
@@ -196,6 +219,7 @@ alter table bookings           enable row level security;
 alter table cleaning_jobs      enable row level security;
 alter table job_images         enable row level security;
 alter table sms_logs           enable row level security;
+alter table sms_templates      enable row level security;
 alter table activity_log       enable row level security;
 alter table highlevel_sync_logs enable row level security;
 
@@ -292,6 +316,14 @@ create policy "sms_logs_admin" on sms_logs for all
   using (exists (
     select 1 from profiles where id = auth.uid() and role = 'admin'
   ));
+
+-- SMS templates: all authenticated can read; only admins can update
+create policy "sms_templates_select" on sms_templates for select
+  using (auth.uid() is not null);
+
+create policy "sms_templates_update" on sms_templates for update
+  using (private.current_user_has_role(array['admin']))
+  with check (private.current_user_has_role(array['admin']));
 
 -- Activity log: all authenticated can read; actor_id must match the caller
 -- so log entries cannot be forged by another user.

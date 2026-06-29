@@ -1,6 +1,6 @@
 'use client'
 
-import { useState, useEffect, useCallback } from 'react'
+import { useState, useEffect } from 'react'
 import { Check, X, Clock, Car } from 'lucide-react'
 import type { Booking } from '@/types'
 
@@ -19,7 +19,7 @@ export function PendingBookingsBanner({ reviewerId }: Props) {
   const [acting, setActing]     = useState<string | null>(null)
   const [error, setError]       = useState<string | null>(null)
 
-  const fetchPending = useCallback(async () => {
+  async function fetchPending() {
     try {
       const res = await fetch('/api/bookings?status=pending')
       if (!res.ok) { setError('Kunde inte hämta väntande bokningar'); return }
@@ -28,9 +28,20 @@ export function PendingBookingsBanner({ reviewerId }: Props) {
     } catch {
       setError('Nätverksfel — kunde inte hämta väntande bokningar')
     }
-  }, [])
+  }
 
-  useEffect(() => { void fetchPending() }, [fetchPending])
+  useEffect(() => {
+    let cancelled = false
+    fetch('/api/bookings?status=pending')
+      .then(async res => {
+        if (cancelled) return
+        if (!res.ok) { setError('Kunde inte hämta väntande bokningar'); return }
+        const data = await res.json()
+        if (!cancelled) setBookings(Array.isArray(data) ? data : [])
+      })
+      .catch(() => { if (!cancelled) setError('Nätverksfel — kunde inte hämta väntande bokningar') })
+    return () => { cancelled = true }
+  }, [])
 
   async function handleAction(bookingId: string, action: 'approved' | 'rejected') {
     if (!reviewerId) return

@@ -4,7 +4,7 @@ export type BookingStatus = 'pending' | 'confirmed' | 'in_progress' | 'completed
 
 export type CleaningJobStatus = 'not_started' | 'in_progress' | 'completed' | 'needs_review'
 
-export type SmsStatus = 'pending' | 'sent' | 'delivered' | 'failed'
+export type SmsStatus = 'pending' | 'sent' | 'delivered' | 'failed' | 'unknown'
 
 export interface Profile {
   id: string

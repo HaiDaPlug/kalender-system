@@ -12,7 +12,10 @@ export async function GET(_: NextRequest, { params }: { params: Promise<{ id: st
     .eq('id', id)
     .single()
 
-  if (error) return NextResponse.json({ error: error.message }, { status: 404 })
+  if (error) {
+    console.error(`[booking:get] id=${id} error=${error.code} ${error.message}`)
+    return NextResponse.json({ error: error.message }, { status: 404 })
+  }
   return NextResponse.json(data)
 }
 
