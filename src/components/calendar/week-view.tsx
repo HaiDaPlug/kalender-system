@@ -6,6 +6,7 @@ import {
   HOURS,
   WEEK_DAYS_SE,
   HOUR_PX,
+  TIME_COL_PX,
   isSameDay,
   startOfWeek,
   addDays,
@@ -85,19 +86,22 @@ export function WeekView({ current, bookings, workers = [], onSelectBooking, onB
   return (
     <div className="flex flex-col flex-1 min-h-0">
       {/* Day headers */}
-      <div className="grid border-b border-border shrink-0" style={{ gridTemplateColumns: '48px repeat(7, 1fr)' }}>
-        <div className="flex items-end justify-center pb-2">
+      <div className="grid border-b border-border shrink-0" style={{ gridTemplateColumns: `${TIME_COL_PX}px repeat(7, 1fr)` }}>
+        <div className="flex items-center justify-center">
           <span className="label-caps text-primary">V{weekNum}</span>
         </div>
         {weekDays.map((day, i) => {
           const isToday = isSameDay(day, today)
           return (
-            <div key={i} className="py-2 text-center flex flex-col items-center gap-0.5">
-              <span className="label-caps">{WEEK_DAYS_SE[i]}</span>
-              <span className={cn(
-                'h-7 w-7 flex items-center justify-center rounded-full text-sm tabular font-medium',
-                isToday ? 'bg-primary text-primary-foreground' : 'text-foreground'
-              )}>
+            <div key={i} className="py-2.5 text-center flex flex-col items-center gap-0.5">
+              <span className="label-caps" style={{ fontSize: 'calc(0.65rem + 2px)' }}>{WEEK_DAYS_SE[i]}</span>
+              <span
+                className={cn(
+                  'h-10 w-10 flex items-center justify-center rounded-full tabular font-medium',
+                  isToday ? 'bg-primary text-primary-foreground' : 'text-foreground'
+                )}
+                style={{ fontSize: 'calc(0.65rem + 7px)' }}
+              >
                 {day.getDate()}
               </span>
             </div>
@@ -107,12 +111,12 @@ export function WeekView({ current, bookings, workers = [], onSelectBooking, onB
 
       {/* Scrollable time grid */}
       <div ref={scrollRef} className="flex-1 overflow-y-auto min-h-0">
-        <div className="relative" style={{ gridTemplateColumns: '48px repeat(7, 1fr)', display: 'grid' }}>
+        <div className="relative" style={{ gridTemplateColumns: `${TIME_COL_PX}px repeat(7, 1fr)`, display: 'grid' }}>
           {/* Hour labels */}
           <div className="col-start-1 relative">
             {HOURS.map(h => (
-              <div key={h} className="h-16 flex items-start justify-end pr-2 pt-0.5">
-                <span className="label-caps tabular">{String(h).padStart(2, '0')}:00</span>
+              <div key={h} className="flex items-start justify-end pr-2.5 pt-0.5" style={{ height: HOUR_PX }}>
+                <span className="label-caps tabular" style={{ fontSize: 'calc(0.65rem + 3px)' }}>{String(h).padStart(2, '0')}:00</span>
               </div>
             ))}
           </div>
@@ -133,7 +137,7 @@ export function WeekView({ current, bookings, workers = [], onSelectBooking, onB
                 }}
                 onMouseLeave={() => setHoverInfo(null)}
                 className={cn(
-                  'relative border-l border-border cursor-pointer',
+                  'relative border-l border-border/60 cursor-pointer',
                   isToday && 'bg-primary/3'
                 )}
                 style={{ height: `${HOURS.length * HOUR_PX}px` }}
@@ -142,7 +146,7 @@ export function WeekView({ current, bookings, workers = [], onSelectBooking, onB
                 {HOURS.map(h => (
                   <div
                     key={h}
-                    className="absolute left-0 right-0 border-t border-border/50"
+                    className="absolute left-0 right-0 border-t border-border/40"
                     style={{ top: `${h * HOUR_PX}px` }}
                   />
                 ))}
@@ -151,7 +155,7 @@ export function WeekView({ current, bookings, workers = [], onSelectBooking, onB
                 {HOURS.map(h => (
                   <div
                     key={`h${h}`}
-                    className="absolute left-0 right-0 border-t border-border/20"
+                    className="absolute left-0 right-0 border-t border-border/15"
                     style={{ top: `${h * HOUR_PX + HOUR_PX / 2}px` }}
                   />
                 ))}
@@ -238,7 +242,7 @@ export function WeekView({ current, bookings, workers = [], onSelectBooking, onB
           {/* Current time line — spans all 7 day columns, updates every minute */}
           <div
             className="absolute left-0 right-0 z-20 pointer-events-none"
-            style={{ top: `${timePx}px`, paddingLeft: '48px' }}
+            style={{ top: `${timePx}px`, paddingLeft: `${TIME_COL_PX}px` }}
           >
             <div className="flex items-center">
               <div className="h-2 w-2 rounded-full bg-primary shrink-0 ml-[-4px]" />

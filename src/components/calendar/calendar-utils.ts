@@ -11,8 +11,8 @@ export const STATUS_CONFIG = {
 } as const
 
 export const HOURS = Array.from({ length: 24 }, (_, i) => i)
-// h-16 in Tailwind = 4rem. Base font is 18px → 4 × 18 = 72px per hour row.
-export const HOUR_PX = 72
+export const HOUR_PX = 60
+export const TIME_COL_PX = 80
 export const WEEK_DAYS_SE = ['Mån', 'Tis', 'Ons', 'Tor', 'Fre', 'Lör', 'Sön']
 export const MONTHS_SE = [
   'Januari', 'Februari', 'Mars', 'April', 'Maj', 'Juni',

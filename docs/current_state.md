@@ -1,5 +1,5 @@
 # KOM-fort Bilvård — Portal: Current State
-_Last updated: 2026-06-11_
+_Last updated: 2026-07-12_
 
 ---
 
@@ -79,12 +79,12 @@ src/
       lightbox.tsx                     # ✅ Fullscreen image lightbox with arrow + keyboard navigation
       button.tsx
     calendar/
-      calendar-view.tsx                # Toolbar, filters, view switcher, "New booking" button
+      calendar-view.tsx                # Full-bleed toolbar (nav, title, view dropdown, status/worker filters, "Ny bokning" at far right) + status legend footer below the grid
       day-view.tsx                     # 24h grid, 15-min snap slot clicks, live time line
-      week-view.tsx                    # 7-col grid, 15-min snap per column
+      week-view.tsx                    # 7-col grid, 15-min snap per column, compact day headers (day name above date circle, V{week} in the left spacer)
       month-view.tsx                   # Month view, click → day view
       booking-detail-panel.tsx         # Slide-in panel from right on booking click
-      calendar-utils.ts                # Layout math, time helpers, HOUR_PX constant
+      calendar-utils.ts                # Layout math, time helpers, HOUR_PX / TIME_COL_PX constants
       create-booking-modal.tsx         # ✅ Modal: customer, car, service, status, worker, price
     shifts/
       create-shift-modal.tsx           # ✅ Modal for worker to submit a shift
@@ -94,8 +94,8 @@ src/
       jobs-board.tsx                   # ✅ Kanban board component (4 columns by status) — cards link to /bookings/[id]
       job-photos.tsx                   # ✅ Before/after photo upload component for workers
     layout/
-      sidebar.tsx                      # Side menu: Översikt, Kalender, Mina pass, Jobb, Granskning*, SMS-mallar**, Personal* (*admin/manager, **admin only)
-      top-bar.tsx                      # Top bar with date, avatar, logout
+      sidebar.tsx                      # Side menu: Översikt, Kalender, Mina pass, Jobb, Granskning*, SMS-mallar**, Personal* (*admin/manager, **admin only). Collapsible (icon rail, persisted in localStorage). No wordmark/logo. Bottom-up: notifications bell → account section (avatar/name/role, click opens "Logga ut" popup, wired to Supabase sign-out).
+      top-bar.tsx                      # Top bar with page title + date only — no avatar/notifications/logout (moved into sidebar account section)
       providers.tsx
     auth/login-form.tsx
     booking/bookings-table.tsx
@@ -138,6 +138,7 @@ supabase/
 7. `006_fix_profiles_policy_recursion.sql` — fixes RLS infinite recursion on profiles via security-definer helper
 8. `007_booking_worker_submit.sql` — adds `created_by`, opens booking INSERT to workers (pending status only)
 9. `008_sms_templates.sql` — creates `sms_templates` table, adds `unknown` to `sms_logs` status constraint, seeds default confirmation template
+10. **Not yet a migration file** — `alter function handle_new_user() set search_path = public;` applied directly to the live DB on 2026-07-11. See changelog for why. Should be captured as `009_fix_handle_new_user_search_path.sql` before the next fresh-DB setup.
 
 **Storage buckets (create manually in Supabase dashboard, set to public):**
 - `car-before-images`
@@ -171,7 +172,7 @@ Three views: **Day / Week / Month**
 
 ## Calendar — technical notes
 
-- **`HOUR_PX = 72`** in `calendar-utils.ts` — base font 18px makes `h-16` (4rem) = 72px per hour row. All pixel calculations use this constant. Never hardcode `64`.
+- **`HOUR_PX = 60`** and **`TIME_COL_PX = 80`** in `calendar-utils.ts` — hour row height and hour-label column width. Hour labels are sized with an inline `style={{ height: HOUR_PX }}` (not a Tailwind `h-*` class) so they can never drift out of sync with the constant. All pixel calculations use these constants — never hardcode.
 - **Slot click fix:** `getSlotFromEvent` uses `scrollRef.current.getBoundingClientRect()` (the scroll container), not the inner column div — prevents double-counting scroll offset.
 - **15-min snap:** `Math.floor(y / (HOUR_PX / 4)) * 15` — one slot = `HOUR_PX / 4` pixels.
 - **Hover block:** always 30 min tall (`HOUR_PX / 2`), top transitions at 80ms for a gliding feel.
@@ -311,8 +312,8 @@ Workers document their work directly from the booking detail page (`/bookings/[i
 |---|---|
 | Auth enabled (proxy.ts is passthrough) | **Before production** |
 | Storage bucket RLS policies | **Before production** |
-| SMS via 46elks — wired up but not confirmed working end-to-end yet | **In progress** |
-| Auto-SMS on booking create (currently only fires on approval) | Medium |
+| SMS via 46elks — wired up, debug logs added, blocked on live test (see 2026-07-12 entry) | **In progress** |
+| Auto-SMS on booking create — now wired via 46elks (same path as approval) | Done |
 | Auto-SMS when car is ready | High |
 | Dashboard stats with real data (totalBookings, activeJobs, completedToday) | Medium |
 | Recent bookings on dashboard with real data | Medium |
@@ -343,6 +344,34 @@ npm run dev
 ---
 
 ## Changelog
+
+### 2026-07-12 (Booking creation testing, auth bootstrap, button styling)
+- **Live SMS test blocked by prod auth gap, not SMS itself:** attempted to test the create-booking → 46elks SMS flow on the deployed site (`kalender-system.vercel.app`). Got 401 Unauthorized because `proxy.ts` is still a passthrough stub — it never calls `updateSession`, so no real session cookie is ever validated/refreshed at the edge, and `/api/bookings/create` correctly rejects the unauthenticated request in production (the `isDev` bypass only applies locally). This is the same known gap already tracked as "Auth enabled (proxy.ts is passthrough) — Before production"; testing was blocked because there was no way to actually log in yet (see next item).
+- **Root cause found and fixed: `handle_new_user()` trigger was broken for every real caller.** Trying to create the first user (via Supabase dashboard "Add user", and independently via the GoTrue admin API) returned a 500 "Database error creating new user" every time. Root cause: the trigger's `insert into profiles (...)` uses an unqualified table name and relied on the calling session's `search_path`. Ad-hoc SQL sessions default to `search_path` including `public`, so the trigger looked fine when tested that way — but GoTrue's actual DB role, `supabase_auth_admin`, has `search_path=auth` only (confirmed via `pg_roles.rolconfig`), so `profiles` never resolved and every insert into `auth.users` failed with `relation "profiles" does not exist (SQLSTATE 42P01)` (confirmed via the project's Auth logs, queried through the Management API's `analytics/endpoints/logs.all`). This means **no account had ever been successfully created in this project** — not the dashboard, not the in-app `POST /api/workers` invite flow — until this was fixed. Fix applied live: `alter function handle_new_user() set search_path = public;`. Not yet captured as a tracked migration file (see Database section — should become `009_fix_handle_new_user_search_path.sql`).
+- **First real account created:** `goran.ismailovic07@gmail.com`, role `admin`, created directly via the GoTrue admin API with `email_confirm: true` (bypasses the "no SMTP configured" issue below entirely — no confirmation email needed). This unblocks logging in on the deployed site and using the in-app "Lägg till anställd" flow on `/workers` for all future worker/manager accounts.
+- **No SMTP configured:** `smtp_host`/`smtp_user`/`smtp_pass`/`smtp_admin_email` are all null in the Auth config (checked via Management API `config/auth`). Any flow that requires Supabase to send an email (dashboard "Add user" without `email_confirm: true`, `POST /api/workers`'s `inviteUserByEmail`) will hit Supabase's default mailer, which has strict rate limits — not yet an issue in practice, but worth setting up real SMTP (e.g. Resend, already used elsewhere in this app) before onboarding real employees, so invite emails reliably land.
+- **Role/account bootstrapping documented:** confirmed there is no self-serve `/register` route (`src/app/(auth)/register/` exists but is empty — dead route). The only way to create the *first* admin account is directly via Supabase (dashboard or Admin API) since `POST /api/workers` itself requires an existing admin caller. All subsequent accounts should go through `/workers` → "Lägg till anställd" as normal.
+- **"Skapa bokning" button restyled:** the create-booking-modal submit button now uses a `.btn-sheen` utility (new, in `globals.css`) — a translucent white→black sheen blended with SVG film-grain noise via `::after` (`mix-blend-mode: overlay`, 22% opacity), layered over the existing flat `bg-primary` (`#F5C842`) fill. Adapted from a reference button design (forest-green base + sheen/grain, no hover color change) — recreated with this app's own yellow instead of copying the reference palette. Scoped as an opt-in class, not applied to buttons globally.
+- **Still open:** actual end-to-end SMS delivery (booking → 46elks → phone) has still not been confirmed — testing was interrupted by the auth/account bootstrap issues above, not by an SMS-specific failure. Next session should log in as the new admin account and retry the original test.
+
+### 2026-07-12 (Calendar visual polish)
+- **Full-bleed layout:** the calendar no longer sits in a rounded, bordered "card" floating inside the dashboard's padded content area. `calendar/page.tsx` bleeds out of the shell's `p-6` with `-m-6`, and `calendar-view.tsx`'s outer wrapper dropped `rounded border bg-card` for a flush `bg-background` panel that touches the top bar, sidebar, and viewport edges directly.
+- **Status legend moved:** the Väntande/Bekräftad/Pågående/Klar/Avbokad legend now renders as a footer bar below the calendar grid (`border-t`) instead of above it.
+- **Grid density (Google Calendar–style):** `HOUR_PX` went 72 → 96 → 60 across a few iterations (96 read as bloated, showed too few hours at once); settled at 60 for a dense, more-hours-visible-at-once feel. Hour/half-hour grid lines lightened (`border-border/40` and `/15`) and day-column dividers softened (`/60`) to match Google Calendar's quieter grid.
+- **Time column widened:** `TIME_COL_PX` introduced (48 → 64 → 80px) so hour labels (`04:00` etc.) have breathing room; shared by both week and day views plus the current-time-line's left offset.
+- **Day header redesign:** weekday name now sits above the date number (was inline) in a taller header row; date circle enlarged (`h-10 w-10`) with a bigger font. Font sizes were tuned via explicit `calc(0.65rem + Npx)` overrides layered on top of the shared `.label-caps` class (weekday +2px, date number +7px total, hour-axis labels +3px) so the three elements can scale independently of each other and of unrelated `.label-caps` usages elsewhere (status legend, month view).
+- **`V{week}` relocated:** removed from the toolbar title (`Vecka 28 · Juli 2026` → just `Juli 2026`) and now renders in the grid's top-left spacer cell, above the hour-label column — mirrors Google Calendar's week-number placement.
+- **Toolbar rework:** "Idag" button removed entirely (along with the now-unused `goToday` handler and `CalendarDays` import). Dag/Vecka/Månad is now a `<select>` dropdown positioned right after the title instead of a 3-button segmented control. "Ny bokning" moved to be the last (rightmost) element in the toolbar, after the status/worker filters.
+- **Note:** the sidebar/top-bar changes below (collapsible rail, avatar/logout moved into sidebar, dark theme softening) were done in a separate terminal working the backend/auth side in parallel — unrelated to the calendar work above.
+
+### 2026-07-12 (Sidebar/top bar rework + dark theme polish)
+- **Collapsible sidebar:** `sidebar.tsx` now toggles between full width (`w-56`) and an icon-only rail (`w-16`) via a toggle button above the account section. State persisted in `localStorage` (`sidebar-collapsed`). Nav item labels, wordmark, and account text hide when collapsed; `title` attributes added for accessibility.
+- **Sidebar wordmark/logo removed** — the "RenGör" text + accent bar block at the top of the sidebar is gone (temporary). The `h-14` header strip stays as an empty spacer so the sidebar still lines up with the top bar.
+- **Top bar simplified:** avatar and sign-out button removed from `top-bar.tsx` (redundant with the sidebar's account section) — now just page title + date. No longer takes a `profile` prop.
+- **Sign-out moved into the sidebar account section:** clicking the avatar/name block at the bottom of the sidebar opens a small popup with "Logga ut" (closes on outside click or Escape). Popup is anchored above-right of the account button when expanded, and flies out to the right of the rail when collapsed (avoids clipping against the narrow 64px rail); `z-50` added so it always paints above sibling content.
+- **Notifications relocated:** the bell icon moved out of the top bar into its own row in the sidebar, directly above the account section.
+- **Dark theme palette softened:** `globals.css` `:root` tokens reworked — background lightened from near-pure-black (`#0A0A0B`) to `#131316`, foreground dimmed slightly (`#F0EDE8` → `#E8E4DC`, contrast ~17:1 → ~14.6:1) to reduce eye strain/halation. Card/popover elevation fixed (previously darker than background, now correctly lighter). Secondary/muted/accent/input/border rebalanced to match.
+- **Sidebar given a distinct warm gold-tinted dark tone** (`--sidebar: #17140F`, `--sidebar-accent: #241F17`, `--sidebar-border: #332C1F`) — same hue family as the `#F5C842` brand yellow but near-black in lightness, so the sidebar reads as its own zone instead of blending into the neutral-gray main content background.
 
 ### 2026-06-09
 - **Job photo flow:** `JobPhotos` component on `/bookings/[id]` — workers upload before/after photos, status auto-updates (`not_started` → `in_progress` → `needs_review`). Lightbox for fullscreen image viewing with keyboard navigation.
@@ -391,3 +420,13 @@ npm run dev
 - **TypeScript:** `calendar/page.tsx` cast updated to `as unknown as Booking[]` after regenerated types exposed `cleaning_job` shape mismatch. Database types regenerated post-migration-008.
 - **`sms-parts.ts`** (`src/lib/sms/sms-parts.ts`): client-safe GSM-7/Unicode SMS part calculator. Swedish å/ä/ö correctly treated as GSM-7 basic (1 septet each); extended chars (^, {, }, €, etc.) count as 2.
 - **⚠️ SMS not yet confirmed working end-to-end** — booking creation now works, approval flow wired, but live SMS delivery to phone not yet verified.
+
+### 2026-07-09 (SMS provider migration + auth hardening)
+- **GHL SMS removed** — all SMS now goes through 46elks exclusively. GHL env vars commented out in `.env.local` (reserved for future use).
+- **`sendRawSms` exported** from `src/lib/sms/46elks.ts` — normalises phone and sends a pre-composed message body, used by the manual send endpoint.
+- **`POST /api/bookings/create` SMS wired to 46elks** — admin/manager-created confirmed bookings now send SMS via the same path as the approval flow: fetch active template → insert pending `sms_log` → send via 46elks → update log to sent/failed. Worker-submitted pending bookings still skip SMS.
+- **`POST /api/sms/send` rewritten** — manual SMS now uses 46elks instead of GHL. Requires admin or manager role (403 Forbidden for workers). Uses service client so RLS doesn't block the booking/log fetch. `sms_log` and `bookings.sms_confirmation_sent` errors now logged instead of silently ignored.
+- **Auth hardened on booking create** — unauthenticated requests return 401 in production (matching the dev-bypass pattern used across other routes). Service client created after auth is verified. Unauthenticated fallback role changed from `admin` to `worker`.
+- **Supabase service key** — project uses `SUPABASE_SECRET_KEY` (new Supabase publishable/secret key format). `service.ts` reads this key; `NEXT_PUBLIC_SUPABASE_PUBLISHABLE_KEY` is the browser client key.
+- **Debug logs added** to `GET /api/bookings/[id]`, `POST /api/bookings/create` (SMS path), and `POST /api/bookings/approve` (SMS path) — visible in Vercel function logs, not browser devtools. Phone numbers redacted from all logs.
+- **Stale comment fixed** in `approve/route.ts` — stale pending rows are marked `unknown` and skipped (not failed/retried).

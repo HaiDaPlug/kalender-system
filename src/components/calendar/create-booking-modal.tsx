@@ -270,10 +270,10 @@ export function CreateBookingModal({ open, initialDate, workers, onClose, onCrea
             type="submit"
             form="ny-bokning-form"
             disabled={loading}
-            className="flex items-center gap-2 px-4 py-2 text-sm rounded bg-primary text-primary-foreground hover:opacity-90 disabled:opacity-50 transition-opacity font-medium"
+            className="btn-sheen flex items-center gap-2 px-4 py-2 text-sm rounded bg-primary text-primary-foreground disabled:opacity-50 font-medium"
           >
             {loading && <Loader2 className="h-3.5 w-3.5 animate-spin" />}
-            Skapa bokning
+            <span>Skapa bokning</span>
           </button>
         </div>
       </div>

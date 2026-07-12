@@ -20,12 +20,21 @@ create unique index if not exists sms_templates_single_active_idx
 
 alter table sms_templates enable row level security;
 
-create policy "sms_templates_select" on sms_templates for select
-  using (auth.uid() is not null);
-
-create policy "sms_templates_update" on sms_templates for update
-  using (private.current_user_has_role(array['admin']))
-  with check (private.current_user_has_role(array['admin']));
+do $$ begin
+  if not exists (
+    select 1 from pg_policies where tablename = 'sms_templates' and policyname = 'sms_templates_select'
+  ) then
+    create policy "sms_templates_select" on sms_templates for select
+      using (auth.uid() is not null);
+  end if;
+  if not exists (
+    select 1 from pg_policies where tablename = 'sms_templates' and policyname = 'sms_templates_update'
+  ) then
+    create policy "sms_templates_update" on sms_templates for update
+      using (private.current_user_has_role(array['admin']))
+      with check (private.current_user_has_role(array['admin']));
+  end if;
+end $$;
 
 insert into sms_templates (name, body, is_active)
 values (

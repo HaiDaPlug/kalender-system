@@ -27,7 +27,7 @@ export default async function CalendarPage() {
   ])
 
   return (
-    <div className="flex flex-col flex-1 min-h-0">
+    <div className="-m-6 flex flex-col flex-1 min-h-0">
       <CalendarView
         bookings={(bookings ?? []) as unknown as Booking[]}
         workers={(workers ?? []) as Profile[]}

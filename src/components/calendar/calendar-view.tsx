@@ -3,7 +3,7 @@
 import { useState, useMemo, useCallback } from 'react'
 import { useRouter } from 'next/navigation'
 import type { Booking, BookingStatus, Profile } from '@/types'
-import { ChevronLeft, ChevronRight, CalendarDays, Plus } from 'lucide-react'
+import { ChevronLeft, ChevronRight, Plus } from 'lucide-react'
 import { CreateBookingModal } from './create-booking-modal'
 import { cn } from '@/lib/utils/cn'
 import type { CalendarView } from './calendar-utils'
@@ -12,7 +12,6 @@ import {
   MONTHS_SE,
   addDays,
   startOfWeek,
-  getWeekNumber,
   isSameDay,
 } from './calendar-utils'
 import { MonthView } from './month-view'
@@ -57,8 +56,6 @@ export function CalendarView({ bookings, workers = [] }: Props) {
     })
   }
 
-  const goToday = () => setCurrent(new Date())
-
   // Header title
   const title = useMemo(() => {
     if (view === 'dag') {
@@ -69,11 +66,10 @@ export function CalendarView({ bookings, workers = [] }: Props) {
     if (view === 'vecka') {
       const ws = startOfWeek(current)
       const we = addDays(ws, 6)
-      const wn = getWeekNumber(current)
       if (ws.getMonth() === we.getMonth()) {
-        return `Vecka ${wn} · ${MONTHS_SE[ws.getMonth()]} ${ws.getFullYear()}`
+        return `${MONTHS_SE[ws.getMonth()]} ${ws.getFullYear()}`
       }
-      return `Vecka ${wn} · ${MONTHS_SE[ws.getMonth()].slice(0, 3)}–${MONTHS_SE[we.getMonth()].slice(0, 3)} ${ws.getFullYear()}`
+      return `${MONTHS_SE[ws.getMonth()].slice(0, 3)}–${MONTHS_SE[we.getMonth()].slice(0, 3)} ${ws.getFullYear()}`
     }
     return `${MONTHS_SE[current.getMonth()]} ${current.getFullYear()}`
   }, [view, current])
@@ -93,18 +89,9 @@ export function CalendarView({ bookings, workers = [] }: Props) {
   }
 
   return (
-    <div className="relative flex flex-col flex-1 min-h-0 rounded border border-border bg-card overflow-hidden">
+    <div className="relative flex flex-col flex-1 min-h-0 bg-background overflow-hidden">
       {/* Toolbar */}
-      <div className="flex items-center gap-3 px-4 py-3 border-b border-border shrink-0 flex-wrap gap-y-2">
-        {/* Today button */}
-        <button
-          onClick={goToday}
-          className="flex items-center gap-1.5 px-2.5 py-1.5 rounded border border-border text-xs font-medium hover:bg-secondary transition-colors"
-        >
-          <CalendarDays className="h-3.5 w-3.5" />
-          Idag
-        </button>
-
+      <div className="flex items-center gap-3 px-6 py-2.5 border-b border-border shrink-0 flex-wrap gap-y-2">
         {/* Navigation */}
         <div className="flex items-center gap-1">
           <button
@@ -123,6 +110,17 @@ export function CalendarView({ bookings, workers = [] }: Props) {
 
         {/* Title */}
         <span className="text-sm font-semibold">{title}</span>
+
+        {/* View switcher */}
+        <select
+          value={view}
+          onChange={e => setView(e.target.value as CalendarView)}
+          className="h-7 text-xs rounded border border-border bg-secondary text-foreground px-2 focus:outline-none focus:ring-1 focus:ring-primary"
+        >
+          {VIEWS.map(v => (
+            <option key={v.key} value={v.key}>{v.label}</option>
+          ))}
+        </select>
 
         <div className="flex-1" />
 
@@ -160,46 +158,6 @@ export function CalendarView({ bookings, workers = [] }: Props) {
           <Plus className="h-3.5 w-3.5" />
           Ny bokning
         </button>
-
-        {/* View switcher */}
-        <div className="flex rounded border border-border overflow-hidden">
-          {VIEWS.map(v => (
-            <button
-              key={v.key}
-              onClick={() => setView(v.key)}
-              className={cn(
-                'px-3 py-1 text-xs font-medium transition-colors',
-                view === v.key
-                  ? 'bg-primary text-primary-foreground'
-                  : 'text-muted-foreground hover:text-foreground hover:bg-secondary'
-              )}
-            >
-              {v.label}
-            </button>
-          ))}
-        </div>
-      </div>
-
-      {/* Status legend */}
-      <div className="flex items-center gap-4 px-4 py-2 border-b border-border shrink-0 overflow-x-auto">
-        {ALL_STATUSES.map(s => {
-          const cfg = STATUS_CONFIG[s]
-          const count = filtered.filter(b => b.status === s).length
-          return (
-            <button
-              key={s}
-              onClick={() => setStatusFilter(statusFilter === s ? 'all' : s)}
-              className={cn(
-                'flex items-center gap-1.5 shrink-0 transition-opacity',
-                statusFilter !== 'all' && statusFilter !== s && 'opacity-30'
-              )}
-            >
-              <div className="h-2 w-2 rounded-full" style={{ background: cfg.color }} />
-              <span className="label-caps">{cfg.label}</span>
-              <span className="label-caps tabular text-foreground">{count}</span>
-            </button>
-          )
-        })}
       </div>
 
       {/* Calendar body */}
@@ -236,6 +194,28 @@ export function CalendarView({ bookings, workers = [] }: Props) {
           booking={selectedBooking}
           onClose={() => setSelectedBooking(null)}
         />
+      </div>
+
+      {/* Status legend */}
+      <div className="flex items-center gap-4 px-6 py-2 border-t border-border shrink-0 overflow-x-auto">
+        {ALL_STATUSES.map(s => {
+          const cfg = STATUS_CONFIG[s]
+          const count = filtered.filter(b => b.status === s).length
+          return (
+            <button
+              key={s}
+              onClick={() => setStatusFilter(statusFilter === s ? 'all' : s)}
+              className={cn(
+                'flex items-center gap-1.5 shrink-0 transition-opacity',
+                statusFilter !== 'all' && statusFilter !== s && 'opacity-30'
+              )}
+            >
+              <div className="h-2 w-2 rounded-full" style={{ background: cfg.color }} />
+              <span className="label-caps">{cfg.label}</span>
+              <span className="label-caps tabular text-foreground">{count}</span>
+            </button>
+          )
+        })}
       </div>
 
       {/* Modal för ny bokning via toolbar-knappen */}

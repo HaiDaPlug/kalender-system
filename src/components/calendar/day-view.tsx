@@ -5,6 +5,7 @@ import {
   STATUS_CONFIG,
   HOURS,
   HOUR_PX,
+  TIME_COL_PX,
   MONTHS_SE,
   WEEK_DAYS_SE,
   isSameDay,
@@ -74,7 +75,7 @@ export function DayView({ current, bookings, workers = [], onSelectBooking, onBo
   return (
     <div className="flex flex-col flex-1 min-h-0">
       {/* Day header */}
-      <div className="border-b border-border px-6 py-3 shrink-0 flex items-center gap-3">
+      <div className="border-b border-border px-6 py-2.5 shrink-0 flex items-center gap-3">
         <span className="text-sm text-muted-foreground">{WEEK_DAYS_SE[dowIndex]}</span>
         <span className={`text-2xl font-300 tabular ${isToday ? 'text-primary' : 'text-foreground'}`}>
           {current.getDate()}
@@ -91,17 +92,17 @@ export function DayView({ current, bookings, workers = [], onSelectBooking, onBo
       <div ref={scrollRef} className="flex-1 overflow-y-auto min-h-0">
         <div className="relative flex" style={{ height: `${HOURS.length * HOUR_PX}px` }}>
           {/* Hour labels */}
-          <div className="w-12 shrink-0 relative">
+          <div className="shrink-0 relative" style={{ width: TIME_COL_PX }}>
             {HOURS.map(h => (
-              <div key={h} className="h-16 flex items-start justify-end pr-2 pt-0.5">
-                <span className="label-caps tabular">{String(h).padStart(2, '0')}:00</span>
+              <div key={h} className="flex items-start justify-end pr-2.5 pt-0.5" style={{ height: HOUR_PX }}>
+                <span className="label-caps tabular" style={{ fontSize: 'calc(0.65rem + 3px)' }}>{String(h).padStart(2, '0')}:00</span>
               </div>
             ))}
           </div>
 
           {/* Events column */}
           <div
-            className="flex-1 relative border-l border-border cursor-pointer"
+            className="flex-1 relative border-l border-border/60 cursor-pointer"
             onMouseMove={e => {
               if ((e.target as HTMLElement).closest('[role="button"]')) { setHoverSlot(null); return }
               setHoverSlot(getSlotFromEvent(e))
@@ -117,10 +118,10 @@ export function DayView({ current, bookings, workers = [], onSelectBooking, onBo
           >
             {/* Hour lines */}
             {HOURS.map(h => (
-              <div key={h} className="absolute left-0 right-0 border-t border-border/50" style={{ top: `${h * HOUR_PX}px` }} />
+              <div key={h} className="absolute left-0 right-0 border-t border-border/40" style={{ top: `${h * HOUR_PX}px` }} />
             ))}
             {HOURS.map(h => (
-              <div key={`h${h}`} className="absolute left-0 right-0 border-t border-border/20" style={{ top: `${h * HOUR_PX + HOUR_PX / 2}px` }} />
+              <div key={`h${h}`} className="absolute left-0 right-0 border-t border-border/15" style={{ top: `${h * HOUR_PX + HOUR_PX / 2}px` }} />
             ))}
 
             {/* Hover slot — 30-min block snapped to 15-min grid, like Google Calendar */}
