@@ -1,5 +1,5 @@
 # KOM-fort Bilvård — Portal: Current State
-_Last updated: 2026-07-12_
+_Last updated: 2026-07-15 (overnight bookings + hover-slot centering)_
 
 ---
 
@@ -18,7 +18,7 @@ Built specifically for Goran's and the workers' daily workflow, not a generic ca
 | Layer | Choice |
 |---|---|
 | Framework | Next.js 16.2.7 / App Router, TypeScript, `src/` structure |
-| Styling | Tailwind CSS v4 + shadcn/ui, dark theme, Swedish yellow accent (#F5C842) |
+| Styling | Tailwind CSS v4 + shadcn/ui, black-and-gold dark theme (`#131211` base, `#F5C842` accent) |
 | Database / Auth | Supabase (Postgres + Auth) — Hai's project: `vsnbaylcgcksabwradgu` |
 | Image storage | Supabase Storage (buckets: `car-before-images`, `car-after-images`) |
 | GHL integration | HighLevel API v2 |
@@ -32,7 +32,7 @@ Built specifically for Goran's and the workers' daily workflow, not a generic ca
 
 ```
 src/
-  proxy.ts                             # Auth proxy (passthrough in dev)
+  proxy.ts                             # Auth proxy — ACTIVE, calls updateSession on every request except static assets
   types/index.ts                       # All types: Booking, Shift, CleaningJob, ImageRecord, etc.
   lib/
     supabase/
@@ -40,14 +40,14 @@ src/
       server.ts                        # Server client for reads
       server-raw.ts                    # Untyped client for mutation routes
       service.ts                       # Service-role, bypasses RLS (webhooks only)
-      middleware.ts                    # updateSession (activated when auth is enabled)
+      middleware.ts                    # updateSession — redirects unauthenticated pages to /login, 401 JSON on /api/*, exempts /api/webhooks/*
     gohighlevel/
       client.ts                        # GHL API v2: calendar, contacts, SMS
       webhooks.ts                      # Payload parsers for appointment + contact
   app/
     (auth)/login/                      # Login page (Swedish UI)
     (dashboard)/
-      layout.tsx                       # Reads profile from session; DEV_PROFILE stub otherwise
+      layout.tsx                       # Reads profile from session; redirects to /login if no user or no profile row
       dashboard/page.tsx               # Overview: stats + pending shifts banner + recent bookings
       calendar/page.tsx                # Calendar — fetches data from Supabase
       bookings/page.tsx                # Bookings list — not linked in sidebar (calendar covers this)
@@ -149,9 +149,16 @@ supabase/
 ## Auth
 
 - Supabase Auth, three roles: `admin` (Administratör) / `manager` (Admin) / `worker` (Personal)
-- **Currently disabled** — `proxy.ts` returns `NextResponse.next()` unconditionally
-- Layout uses `DEV_PROFILE` stub (Hai Pham Bui, admin) when no session exists
-- **To enable:** replace `proxy.ts` body with `return updateSession(request)`, remove `DEV_PROFILE` from `layout.tsx`
+- **Enabled as of 2026-07-15.** `proxy.ts` calls `updateSession(request)` on every request except `_next/static`, `_next/image`, `favicon.ico`, and static image extensions.
+- `updateSession` (`src/lib/supabase/middleware.ts`):
+  - Unauthenticated + page route (not `/`, `/login`, `/register`, `/api/webhooks/*`) → 307 redirect to `/login`
+  - Unauthenticated + `/api/*` route (excluding `/api/webhooks/*`) → `401 {"error":"unauthenticated"}` JSON, not a redirect (API callers shouldn't get an HTML page back)
+  - `/api/webhooks/*` is always exempt — GHL calls this with no Supabase session at all; it authenticates via its own Ed25519 signature check instead (see GHL webhook section below)
+  - Authenticated user hitting `/login` or `/register` → redirected to `/dashboard`
+- `DEV_PROFILE`/`DEV_USER` stubs removed from `layout.tsx`, `dashboard/page.tsx`, and the dev service-role bypass removed from `calendar/page.tsx` — all three now require a real session + profile row, redirecting to `/login` if either is missing.
+- **Known edge case, not yet hardened:** if an authenticated Supabase user has no matching `profiles` row (e.g. the `handle_new_user` trigger fails), `layout.tsx`/`dashboard/page.tsx` redirect to `/login`, but `updateSession` bounces any authenticated user away from `/login` back to `/dashboard` — this could loop. Low risk today since the trigger reliably creates the profile row, but worth a guard if account-creation paths change.
+- **Login flow:** `login-form.tsx` no longer does an instant `router.push('/dashboard')` on success — it shows a brief "Loggar in på arbetsportalen…" spinner (`entering` state, `animate-fade-in` + `animate-spin`) for ~700ms first.
+- **Found but not yet cleaned up:** several API routes still have `NODE_ENV === 'development'` bypass branches for the unauthenticated case (`api/me`, `api/bookings/create`, `api/bookings/approve`, `api/sms-templates`, `api/workers`, `api/workers/[id]`) — these are now dead code for unauthenticated callers since `updateSession` returns 401 before the route body ever runs, regardless of `NODE_ENV`. Doesn't affect authenticated behavior (those branches only trigger on `!user`). Cleanup candidate, not done in this pass.
 
 ---
 
@@ -159,7 +166,8 @@ supabase/
 
 Three views: **Day / Week / Month**
 
-- Hover over empty time → 30-min highlight block appears, snapped to **15-min grid**, showing the time label in the top-left corner (Google Calendar style)
+- Hover over empty time → 30-min highlight block appears, snapped to **15-min grid**, time label centered in the block
+- Bookings that run past midnight (e.g. a 3-hour session starting 23:00) visually spill into the next day's column instead of being cut off at the day boundary — continuation segment shown with a dashed edge and a `↳` prefix
 - Click → opens "New booking" modal with time prefilled (15-min precision: :00 / :15 / :30 / :45)
 - Click on existing booking → detail panel slides in from right
 - "New booking" button in toolbar → same modal
@@ -178,6 +186,7 @@ Three views: **Day / Week / Month**
 - **Hover block:** always 30 min tall (`HOUR_PX / 2`), top transitions at 80ms for a gliding feel.
 - Auto-scrolls to current time on load (day + week views).
 - Time line in week view spans all 7 columns as a single absolute element.
+- **Overnight spillover:** `getBookingSegmentForDay`/`getDaySegments` in `calendar-utils.ts` clip each booking to a given day's `[00:00, 24:00)` window and flag `continuesFromPrev`/`continuesToNext`. `computeBookingLayouts` operates on these segments (not raw bookings), so a booking is rendered once per day it touches — the tail end appears at the top of the next day's column instead of overflowing past the bottom of the day it started in. `getBookingsForDay` (plain same-day filter) is kept as-is for `month-view.tsx`, which doesn't need segment geometry.
 - Supabase key is `NEXT_PUBLIC_SUPABASE_PUBLISHABLE_KEY` (not `ANON_KEY`).
 
 ---
@@ -300,7 +309,7 @@ Workers document their work directly from the booking detail page (`/bookings/[i
 | `/api/jobs/[id]/images` | POST | Upload image to Supabase Storage |
 | `/api/workers` | GET, POST | GET: `?all=true` includes inactive; POST: invite new employee via Supabase Auth |
 | `/api/workers/[id]` | PATCH | Update role or `is_active` — admin only, uses service client |
-| `/api/me` | GET | Current user's profile (id, role, full_name); returns dev stub when no session |
+| `/api/me` | GET | Current user's profile (id, role, full_name); dev-stub-when-no-session branch is now dead code (see Auth section) |
 | `/api/bookings/approve` | POST | Admin/manager approves or rejects a pending booking — triggers email to worker + SMS to customer |
 | `/api/sms-templates` | GET, PATCH | GET: active template (auth required); PATCH: update body (admin only) |
 
@@ -310,7 +319,8 @@ Workers document their work directly from the booking detail page (`/bookings/[i
 
 | Feature | Priority |
 |---|---|
-| Auth enabled (proxy.ts is passthrough) | **Before production** |
+| ~~Auth enabled (proxy.ts is passthrough)~~ | ~~Done~~ — see Auth section (2026-07-15) |
+| Clean up dead `NODE_ENV === 'development'` bypass branches in API routes (see Auth section) | Low |
 | Storage bucket RLS policies | **Before production** |
 | SMS via 46elks — wired up, debug logs added, blocked on live test (see 2026-07-12 entry) | **In progress** |
 | Auto-SMS on booking create — now wired via 46elks (same path as approval) | Done |
@@ -319,7 +329,7 @@ Workers document their work directly from the booking detail page (`/bookings/[i
 | Recent bookings on dashboard with real data | Medium |
 | Bookings list page (`/bookings`) | Removed from nav — calendar covers this use case |
 | Staff page (`/workers`) | ~~Done~~ — roles, activate/deactivate, add employee |
-| my-shifts page: replace DEV_USER with real session user | Requires auth |
+| my-shifts page: replace DEV_USER with real session user | Unblocked now that auth is enabled — not yet done |
 | Drag-and-drop in calendar | Low |
 | Customer list (`/customers`) | Low |
 | Activity log UI | Low |
@@ -344,6 +354,29 @@ npm run dev
 ---
 
 ## Changelog
+
+### 2026-07-15 (Overnight-spanning bookings + hover-slot time centering)
+- **Problem:** a booking starting late (e.g. 23:00) with a multi-hour duration only rendered in the day it started — the block just extended past the bottom of that day's column instead of appearing at the top of the next day, since `getBookingsForDay` filtered bookings by same-day `scheduled_at` and `computeBookingLayouts` sized the block purely from `duration_minutes` with no day-boundary awareness.
+- **Fix:** `calendar-utils.ts` gained `getBookingSegmentForDay`/`getDaySegments`, which clip a booking to the `[00:00, 24:00)` window of a given day and return `continuesFromPrev`/`continuesToNext` flags. `computeBookingLayouts` now takes these segments instead of raw bookings. `week-view.tsx` and `day-view.tsx` were updated to call `getDaySegments` and to style the cut edge of a spanning booking (dashed border, no rounding on that side, `↳` prefix on the continuation piece) so a long overnight session now visibly continues into the next day's column. `getBookingsForDay` (unchanged, same-day filter) stays in use by `month-view.tsx`, which only needs a same-day list, not segment geometry.
+- **Hover-slot time label centered:** in both views, the 30-min hover/click highlight block previously pinned its time label (e.g. "23:15") to the top-left corner. Now centered both axes via an `absolute inset-0 flex items-center justify-center` wrapper.
+- **Verification:** `tsc --noEmit` clean. Core segment-clipping logic verified with a standalone script importing the real `getDaySegments`/`computeBookingLayouts` exports against a synthetic 23:00 + 180min booking — confirmed correct `startMin`/`endMin`/`continuesFromPrev`/`continuesToNext` on both the start day and the spillover day. **Not done:** no authenticated browser screenshot of the actual calendar page — blocked on not having login credentials for the running dev server (redirects to `/login`); the CSS centering change and the day-boundary math were not visually confirmed in-browser, only via the script above and code review.
+
+### 2026-07-15 (Colour system: tokenized status colors, black-and-gold theme rework)
+- **Goal:** the sidebar's black-and-gold look was originally scoped to just the sidebar/top-bar (see 2026-07-12 entry below); the rest of the app (cards, badges, status colors) had drifted into a separate 5-color rainbow (blue/purple/green/red/amber) plus a neutral-gray main background that didn't match the sidebar's warm black. This pass unified everything under one token system in `globals.css`.
+- **Step 1 — tokenized, no visual change yet:** every hardcoded hex color for booking/job/shift statuses and worker roles, scattered across ~15 files (`recent-bookings.tsx`, `bookings-table.tsx`, `dashboard-stats.tsx`, `customers/[id]/page.tsx`, `admin/job-reviews/page.tsx`, `workers/page.tsx`, `jobs-board.tsx`, `calendar-utils.ts`, `booking-detail-panel.tsx`, `bookings/[id]/page.tsx`, plus banners/panels/modals in `pending-bookings-banner.tsx`, `pending-shifts-banner.tsx`, `pending-shifts-panel.tsx`, `my-shifts/page.tsx`, `job-photos.tsx`, `create-booking-modal.tsx`, `create-shift-modal.tsx`, `sms-templates/page.tsx`) was replaced with references to new CSS custom properties: `--status-pending/confirmed/in-progress/completed/cancelled/not-started` and `--role-admin/manager/worker`, exposed via `@theme inline` as real Tailwind classes (`bg-status-pending`, `text-role-admin`, etc — they didn't exist as usable classes before, only as unwired `:root` vars). Calendar views (`week-view.tsx`, `day-view.tsx`, `month-view.tsx`) consume the same tokens via `var(--status-*)` + `color-mix()` in inline styles, since those colors are computed per-booking and can't be static Tailwind classes.
+- **Step 2 — actual palette redesign, per user request ("apply the navbar's colors globally, I want the black and I want the nice gold"):** `:root` in `globals.css` reworked so background/card/popover/secondary/muted/accent/input all share the sidebar's warm-black family instead of the previous neutral gray-black (`#131316`) vs. warm-black sidebar (`#17140F`) mismatch. Settled on `#131211` (background) / `#191817` (card, popover) / `#201F1D` (secondary, muted, accent, input) — deliberately restrained, barely-warm near-black (after user feedback the first pass, `#17140F`-based, was "too gold-tinted") so gold stays the only color doing visual work. `--primary` (`#F5C842`) unchanged as the single accent.
+- **Step 3 — status color ramp, iterated twice on user feedback:** first attempt collapsed all 5 statuses into a gold-only tonal ramp (gray → amber → gold → pale gold) for "restraint" — user rejected this as illegible ("not even distinguishable... put the colors we had originally like green, red, blue but make them nicer to the eyes"). Reverted to the familiar amber/blue/purple/green/red family, desaturated and value-tuned for dark-mode eye comfort rather than the original saturated hues: `--status-pending: #D9A648` (amber), `--status-confirmed: #6FA3D6` (blue), `--status-in-progress: #A886E0` (purple), `--status-completed: #6FBE87` (green), `--status-cancelled: #DB6D6D` (red), `--status-not-started: #8F8A80` (neutral gray). `--role-admin` = gold (primary), `--role-manager` = `--status-confirmed`, `--role-worker` = `--status-not-started`.
+- **Verification:** `tsc --noEmit` and `npm run build` clean after each step. No visual regression testing beyond the user's own screenshot feedback loop (no dev-server screenshot capture was done by the assistant — user tested live against their own running dev server on port 3001).
+- **Not done / worth flagging:** the exact hex values above are a first pass at "nicer to the eyes" — not validated against WCAG contrast ratios for text-on-background use of the status colors (e.g. `text-status-confirmed` directly on `--background`). Worth a contrast audit before this is considered final.
+
+### 2026-07-15 (Auth enabled, webhook fix, login polish)
+- **`proxy.ts` activated.** It was a scaffolded no-op (`return NextResponse.next()`) with a comment saying "replace with `updateSession` when ready" — swapped in the real call to `updateSession` from `src/lib/supabase/middleware.ts`. Confirmed live: unauthenticated `/dashboard` now 307s to `/login`.
+- **Removed all `DEV_PROFILE`/dev-bypass fallbacks that were scaffolded specifically for this moment** (comments in the code literally said "remove once auth is enabled in proxy.ts"): `layout.tsx`, `dashboard/page.tsx` no longer fall back to a fake admin profile — both now redirect to `/login` if there's no session or no matching `profiles` row. `calendar/page.tsx` no longer falls back to the service-role client in dev when unauthenticated.
+- **Critical bug found via audit and fixed same session: activating the proxy silently broke the GHL webhook.** The existing matcher in `proxy.ts` already covered `/api/*` (pre-dated this session), but had no effect while `proxy()` was a no-op. Wiring in `updateSession` made it live — and `updateSession`'s public-route allowlist only covered `/`, `/login`, `/register`, so GHL's unauthenticated, signature-verified webhook POST to `/api/webhooks/ghl` started getting redirected to `/login` instead of reaching the handler (confirmed via curl: 307 before the fix). Fixed by exempting `/api/webhooks/*` from the auth gate in `updateSession` — its own Ed25519 signature check is the real gate for that route. Also changed the behavior for other unauthenticated `/api/*` calls from a 307 HTML redirect to a `401 {"error":"unauthenticated"}` JSON response, since a `fetch()` caller can't usefully follow a redirect to a login page.
+- **Login flow changed from instant redirect to a brief transition.** `login-form.tsx` previously did `router.push('/dashboard')` immediately on successful sign-in. It now shows a short "Loggar in på arbetsportalen…" spinner (~700ms, reuses the existing `animate-fade-in`/`animate-spin` utilities) before navigating.
+- **"RenGör" wordmark removed from the login page** (`(auth)/login/page.tsx`) — just the accent-bar + text block above the subtitle; the `<title>` tag (site-wide metadata, "RenGör — Biltvätt Portal") was left alone since changing it would affect the whole app's browser tab title, not just this page.
+- **Verification done:** `tsc --noEmit` and `eslint` clean throughout. Live curl checks against the running dev server for: unauthenticated `/dashboard` (307 → `/login`), unauthenticated protected API (401 JSON), unauthenticated GHL webhook (200, reaches handler), `/login` renders. User separately confirmed the full browser walkthrough (login → dashboard → logout → re-login) works.
+- **Not done, flagged for later:** the dead `NODE_ENV === 'development'` bypass branches left over in `api/me`, `api/bookings/create`, `api/bookings/approve`, `api/sms-templates`, `api/workers`, `api/workers/[id]` (see Auth section) — now unreachable for unauthenticated callers but not cleaned up. The possible `/login` ⇄ `/dashboard` redirect loop for an authenticated user with no profile row (see Auth section) — not reproduced, not hardened.
 
 ### 2026-07-12 (Booking creation testing, auth bootstrap, button styling)
 - **Live SMS test blocked by prod auth gap, not SMS itself:** attempted to test the create-booking → 46elks SMS flow on the deployed site (`kalender-system.vercel.app`). Got 401 Unauthorized because `proxy.ts` is still a passthrough stub — it never calls `updateSession`, so no real session cookie is ever validated/refreshed at the edge, and `/api/bookings/create` correctly rejects the unauthenticated request in production (the `isDev` bypass only applies locally). This is the same known gap already tracked as "Auth enabled (proxy.ts is passthrough) — Before production"; testing was blocked because there was no way to actually log in yet (see next item).
@@ -371,7 +404,7 @@ npm run dev
 - **Sign-out moved into the sidebar account section:** clicking the avatar/name block at the bottom of the sidebar opens a small popup with "Logga ut" (closes on outside click or Escape). Popup is anchored above-right of the account button when expanded, and flies out to the right of the rail when collapsed (avoids clipping against the narrow 64px rail); `z-50` added so it always paints above sibling content.
 - **Notifications relocated:** the bell icon moved out of the top bar into its own row in the sidebar, directly above the account section.
 - **Dark theme palette softened:** `globals.css` `:root` tokens reworked — background lightened from near-pure-black (`#0A0A0B`) to `#131316`, foreground dimmed slightly (`#F0EDE8` → `#E8E4DC`, contrast ~17:1 → ~14.6:1) to reduce eye strain/halation. Card/popover elevation fixed (previously darker than background, now correctly lighter). Secondary/muted/accent/input/border rebalanced to match.
-- **Sidebar given a distinct warm gold-tinted dark tone** (`--sidebar: #17140F`, `--sidebar-accent: #241F17`, `--sidebar-border: #332C1F`) — same hue family as the `#F5C842` brand yellow but near-black in lightness, so the sidebar reads as its own zone instead of blending into the neutral-gray main content background.
+- **Sidebar given a distinct warm gold-tinted dark tone** (`--sidebar: #17140F`, `--sidebar-accent: #241F17`, `--sidebar-border: #332C1F`) — same hue family as the `#F5C842` brand yellow but near-black in lightness, so the sidebar reads as its own zone instead of blending into the neutral-gray main content background. **Superseded 2026-07-15** — the rest of the app was later unified to match the sidebar's tone instead of staying visually separate; see the 2026-07-15 colour system changelog entry above.
 
 ### 2026-06-09
 - **Job photo flow:** `JobPhotos` component on `/bookings/[id]` — workers upload before/after photos, status auto-updates (`not_started` → `in_progress` → `needs_review`). Lightbox for fullscreen image viewing with keyboard navigation.
