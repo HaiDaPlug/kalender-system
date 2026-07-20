@@ -5,10 +5,10 @@ import { Loader2, UserCheck, UserX, ChevronDown, Plus, X, Info } from 'lucide-re
 import type { Profile, UserRole } from '@/types'
 import { cn } from '@/lib/utils/cn'
 
-const ROLE_CONFIG: Record<UserRole, { label: string; color: string; bg: string }> = {
-  admin:   { label: 'Administratör', color: '#F5C842', bg: '#F5C84218' },
-  manager: { label: 'Admin',         color: '#4A90D9', bg: '#4A90D918' },
-  worker:  { label: 'Personal',      color: '#8B5CF6', bg: '#8B5CF618' },
+const ROLE_CONFIG: Record<UserRole, { label: string; textClass: string; bgClass: string; dotClass: string }> = {
+  admin:   { label: 'Administratör', textClass: 'text-role-admin',   bgClass: 'bg-role-admin/10',   dotClass: 'bg-role-admin' },
+  manager: { label: 'Admin',         textClass: 'text-role-manager', bgClass: 'bg-role-manager/10', dotClass: 'bg-role-manager' },
+  worker:  { label: 'Personal',      textClass: 'text-role-worker',  bgClass: 'bg-role-worker/10',  dotClass: 'bg-role-worker' },
 }
 
 // Permissions per role — matches actual enforcement in the codebase
@@ -52,9 +52,9 @@ function RoleDropdown({ current, onChange, disabled }: {
         disabled={disabled}
         className={cn(
           'flex items-center gap-1.5 px-2.5 py-1 rounded text-xs font-medium transition-colors',
+          cfg.textClass, cfg.bgClass,
           disabled ? 'cursor-default opacity-60' : 'hover:opacity-80 cursor-pointer'
         )}
-        style={{ color: cfg.color, background: cfg.bg }}
       >
         {cfg.label}
         {!disabled && <ChevronDown className="h-3 w-3" />}
@@ -73,7 +73,7 @@ function RoleDropdown({ current, onChange, disabled }: {
                   role === current && 'bg-secondary/60'
                 )}
               >
-                <div className="h-1.5 w-1.5 rounded-full" style={{ background: ROLE_CONFIG[role].color }} />
+                <div className={`h-1.5 w-1.5 rounded-full ${ROLE_CONFIG[role].dotClass}`} />
                 {ROLE_CONFIG[role].label}
               </button>
             ))}
@@ -93,7 +93,7 @@ function RoleDelegationGuide() {
         onClick={() => setOpen(v => !v)}
         className="w-full flex items-center gap-2.5 px-4 py-3 text-left hover:bg-secondary/30 transition-colors"
       >
-        <Info className="h-4 w-4 text-blue-400 shrink-0" />
+        <Info className="h-4 w-4 text-primary shrink-0" />
         <span className="text-sm font-medium flex-1">Vad innebär varje roll? — guide för delegering</span>
         <ChevronDown className={cn('h-4 w-4 text-muted-foreground transition-transform', open && 'rotate-180')} />
       </button>
@@ -106,8 +106,8 @@ function RoleDelegationGuide() {
             return (
               <div key={role} className="px-4 py-4 space-y-2">
                 <div className="flex items-center gap-2">
-                  <div className="h-2 w-2 rounded-full shrink-0" style={{ background: cfg.color }} />
-                  <p className="text-sm font-semibold" style={{ color: cfg.color }}>{desc.title}</p>
+                  <div className={`h-2 w-2 rounded-full shrink-0 ${cfg.dotClass}`} />
+                  <p className={`text-sm font-semibold ${cfg.textClass}`}>{desc.title}</p>
                 </div>
                 <p className="text-sm text-foreground/90 pl-4">{desc.description}</p>
                 <p className="text-xs text-muted-foreground pl-4 italic">{desc.useCase}</p>
@@ -188,8 +188,8 @@ function WorkerRow({ worker, onRoleChange, onToggleActive }: {
           className={cn(
             'h-7 w-7 flex items-center justify-center rounded transition-colors shrink-0',
             worker.is_active
-              ? 'text-green-400 hover:bg-red-500/10 hover:text-red-400'
-              : 'text-muted-foreground hover:bg-green-500/10 hover:text-green-400',
+              ? 'text-status-completed hover:bg-destructive/10 hover:text-destructive'
+              : 'text-muted-foreground hover:bg-status-completed/10 hover:text-status-completed',
             'disabled:opacity-40 disabled:pointer-events-none'
           )}
         >
@@ -322,7 +322,7 @@ function AddWorkerForm({ onAdded }: { onAdded: (w: Profile) => void }) {
       </div>
 
       {formError && (
-        <p className="text-xs text-red-400 bg-red-500/10 px-3 py-2 rounded">{formError}</p>
+        <p className="text-xs text-destructive bg-destructive/10 px-3 py-2 rounded">{formError}</p>
       )}
 
       <div className="flex justify-end gap-2">
@@ -399,8 +399,8 @@ export default function WorkersPage() {
       <div className="flex gap-4 flex-wrap">
         {(Object.keys(ROLE_CONFIG) as UserRole[]).map(role => (
           <div key={role} className="flex items-center gap-1.5 text-xs">
-            <div className="h-1.5 w-1.5 rounded-full" style={{ background: ROLE_CONFIG[role].color }} />
-            <span style={{ color: ROLE_CONFIG[role].color }}>{ROLE_CONFIG[role].label}</span>
+            <div className={`h-1.5 w-1.5 rounded-full ${ROLE_CONFIG[role].dotClass}`} />
+            <span className={ROLE_CONFIG[role].textClass}>{ROLE_CONFIG[role].label}</span>
             <span className="text-muted-foreground">— {ROLE_PERMISSIONS[role].length} behörigheter</span>
           </div>
         ))}
@@ -412,7 +412,7 @@ export default function WorkersPage() {
           <span className="text-sm">Laddar personal…</span>
         </div>
       ) : error ? (
-        <p className="text-sm text-red-400 bg-red-500/10 px-4 py-3 rounded border border-red-500/20">{error}</p>
+        <p className="text-sm text-destructive bg-destructive/10 px-4 py-3 rounded border border-destructive/20">{error}</p>
       ) : sorted.length === 0 ? (
         <div className="rounded border border-border bg-card px-5 py-14 text-center">
           <p className="text-sm text-muted-foreground">Ingen personal hittades</p>

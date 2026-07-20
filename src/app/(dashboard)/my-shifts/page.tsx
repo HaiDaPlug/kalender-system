@@ -17,9 +17,9 @@ const DEV_USER: Profile = {
 }
 
 const STATUS_LABEL: Record<string, { label: string; color: string; icon: React.ReactNode }> = {
-  pending:  { label: 'Väntar',     color: 'text-amber-400',  icon: <Clock className="h-3.5 w-3.5" /> },
-  approved: { label: 'Godkänt',   color: 'text-green-400',  icon: <CheckCircle2 className="h-3.5 w-3.5" /> },
-  rejected: { label: 'Avvisat',   color: 'text-red-400',    icon: <XCircle className="h-3.5 w-3.5" /> },
+  pending:  { label: 'Väntar',   color: 'text-status-pending',   icon: <Clock className="h-3.5 w-3.5" /> },
+  approved: { label: 'Godkänt',  color: 'text-status-completed', icon: <CheckCircle2 className="h-3.5 w-3.5" /> },
+  rejected: { label: 'Avvisat',  color: 'text-status-cancelled', icon: <XCircle className="h-3.5 w-3.5" /> },
 }
 
 function formatShiftTime(shift: Shift): { date: string; time: string; hours: number } {
@@ -138,7 +138,7 @@ export default function MyShiftsPage() {
                   <p className="text-sm font-semibold capitalize">{fmt.date}</p>
                   <p className="text-xs text-muted-foreground">{fmt.time} · {fmt.hours} tim</p>
                   {shift.notes && (
-                    <p className="text-xs mt-1.5 px-2 py-1 rounded bg-amber-400/10 text-amber-300 border border-amber-400/20">
+                    <p className="text-xs mt-1.5 px-2 py-1 rounded bg-status-pending/10 text-status-pending border border-status-pending/20">
                       {shift.notes}
                     </p>
                   )}
@@ -167,7 +167,7 @@ export default function MyShiftsPage() {
                         </p>
                         {/* Kommentarer/önskemål syns tydligt */}
                         {b.customer_notes && (
-                          <p className="text-xs mt-1 px-2 py-1 rounded bg-blue-500/10 text-blue-300 border border-blue-500/20">
+                          <p className="text-xs mt-1 px-2 py-1 rounded bg-primary/10 text-primary border border-primary/20">
                             {b.customer_notes}
                           </p>
                         )}

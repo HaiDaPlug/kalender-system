@@ -61,12 +61,12 @@ export function PendingShiftsPanel({ currentUser }: Props) {
         className="w-full flex items-center justify-between px-4 py-3 hover:bg-secondary/50 transition-colors"
       >
         <div className="flex items-center gap-2">
-          <Clock className="h-4 w-4 text-amber-400" />
+          <Clock className="h-4 w-4 text-status-pending" />
           <span className="text-sm font-semibold">
             {isAdmin ? 'Pass som väntar på godkännande' : 'Mina väntande pass'}
           </span>
           {visible.length > 0 && (
-            <span className="h-5 min-w-5 px-1.5 rounded-full bg-amber-400/20 text-amber-400 text-xs font-semibold flex items-center justify-center">
+            <span className="h-5 min-w-5 px-1.5 rounded-full bg-status-pending/20 text-status-pending text-xs font-semibold flex items-center justify-center">
               {visible.length}
             </span>
           )}
@@ -91,7 +91,7 @@ export function PendingShiftsPanel({ currentUser }: Props) {
                 <p className="text-sm font-medium">{shift.worker?.full_name ?? '—'}</p>
                 <p className="text-xs text-muted-foreground">{formatShiftTime(shift)}</p>
                 {shift.notes && (
-                  <p className="text-xs mt-1 px-2 py-1 rounded bg-amber-400/10 text-amber-300 border border-amber-400/20">
+                  <p className="text-xs mt-1 px-2 py-1 rounded bg-status-pending/10 text-status-pending border border-status-pending/20">
                     {shift.notes}
                   </p>
                 )}
@@ -104,7 +104,7 @@ export function PendingShiftsPanel({ currentUser }: Props) {
                     onClick={() => handleAction(shift.id, 'approved')}
                     disabled={acting === shift.id}
                     title="Godkänn"
-                    className="h-7 w-7 flex items-center justify-center rounded bg-green-500/10 text-green-400 hover:bg-green-500/20 disabled:opacity-40 transition-colors"
+                    className="h-7 w-7 flex items-center justify-center rounded bg-status-completed/10 text-status-completed hover:bg-status-completed/20 disabled:opacity-40 transition-colors"
                   >
                     <Check className="h-3.5 w-3.5" />
                   </button>
@@ -112,7 +112,7 @@ export function PendingShiftsPanel({ currentUser }: Props) {
                     onClick={() => handleAction(shift.id, 'rejected')}
                     disabled={acting === shift.id}
                     title="Avvisa"
-                    className="h-7 w-7 flex items-center justify-center rounded bg-red-500/10 text-red-400 hover:bg-red-500/20 disabled:opacity-40 transition-colors"
+                    className="h-7 w-7 flex items-center justify-center rounded bg-destructive/10 text-destructive hover:bg-destructive/20 disabled:opacity-40 transition-colors"
                   >
                     <X className="h-3.5 w-3.5" />
                   </button>

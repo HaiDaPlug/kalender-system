@@ -146,13 +146,13 @@ export default function SmsTemplatesPage() {
               {' · '}
               {smsInfo.parts === 1 ? '1 SMS' : `${smsInfo.parts} SMS-delar`}
               {smsInfo.parts > 1 && (
-                <span className="text-yellow-400 ml-1">— debiteras per del</span>
+                <span className="text-status-pending ml-1">— debiteras per del</span>
               )}
             </p>
           </div>
 
           {error && (
-            <p className="text-xs text-red-400 bg-red-500/10 px-3 py-2 rounded">{error}</p>
+            <p className="text-xs text-destructive bg-destructive/10 px-3 py-2 rounded">{error}</p>
           )}
 
           <button

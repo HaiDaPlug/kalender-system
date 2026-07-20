@@ -9,10 +9,10 @@ import { cn } from '@/lib/utils/cn'
 import { Lightbox } from '@/components/ui/lightbox'
 
 const STATUS_CONFIG = {
-  not_started:  { label: 'Ej påbörjat',       color: '#6B6870' },
-  in_progress:  { label: 'Pågående',           color: '#8B5CF6' },
-  needs_review: { label: 'Väntar granskning',  color: '#C4962A' },
-  completed:    { label: 'Klart',              color: '#3DAB6A' },
+  not_started:  { label: 'Ej påbörjat',       textClass: 'text-status-not-started', bgClass: 'bg-status-not-started' },
+  in_progress:  { label: 'Pågående',           textClass: 'text-status-in-progress', bgClass: 'bg-status-in-progress' },
+  needs_review: { label: 'Väntar granskning',  textClass: 'text-status-pending',     bgClass: 'bg-status-pending' },
+  completed:    { label: 'Klart',              textClass: 'text-status-completed',   bgClass: 'bg-status-completed' },
 }
 
 interface JobWithImages extends CleaningJob {
@@ -87,7 +87,7 @@ function JobCard({ job, onMarkDone }: { job: JobWithImages; onMarkDone: (id: str
     <div
       className={cn(
         'rounded border bg-card overflow-hidden transition-all',
-        job.status === 'needs_review' ? 'border-yellow-500/40' : 'border-border'
+        job.status === 'needs_review' ? 'border-status-pending/40' : 'border-border'
       )}
     >
       {/* Header */}
@@ -95,7 +95,7 @@ function JobCard({ job, onMarkDone }: { job: JobWithImages; onMarkDone: (id: str
         className="w-full flex items-center gap-3 px-4 py-3 hover:bg-secondary/40 transition-colors text-left"
         onClick={() => setExpanded(v => !v)}
       >
-        <div className="h-2 w-2 rounded-full shrink-0" style={{ background: cfg.color }} />
+        <div className={`h-2 w-2 rounded-full shrink-0 ${cfg.bgClass}`} />
         <div className="flex-1 min-w-0">
           <div className="flex items-center gap-2 flex-wrap">
             <span className="text-sm font-medium">
@@ -113,7 +113,7 @@ function JobCard({ job, onMarkDone }: { job: JobWithImages; onMarkDone: (id: str
             )}
           </div>
           <div className="flex items-center gap-3 mt-0.5">
-            <span className="text-xs" style={{ color: cfg.color }}>{cfg.label}</span>
+            <span className={`text-xs ${cfg.textClass}`}>{cfg.label}</span>
             {job.started_at && (
               <span className="text-xs text-muted-foreground flex items-center gap-1">
                 <Clock className="h-3 w-3" />
@@ -157,7 +157,7 @@ function JobCard({ job, onMarkDone }: { job: JobWithImages; onMarkDone: (id: str
           {job.status === 'needs_review' && (
             <div className="space-y-2">
               {error && (
-                <p className="text-xs text-red-400 bg-red-500/10 px-3 py-2 rounded">{error}</p>
+                <p className="text-xs text-destructive bg-destructive/10 px-3 py-2 rounded">{error}</p>
               )}
               <textarea
                 value={adminComment}
@@ -181,7 +181,7 @@ function JobCard({ job, onMarkDone }: { job: JobWithImages; onMarkDone: (id: str
           )}
           {job.status === 'completed' && (
             <div className="space-y-1.5">
-              <div className="flex items-center gap-2 text-xs text-green-400">
+              <div className="flex items-center gap-2 text-xs text-status-completed">
                 <CheckCircle2 className="h-3.5 w-3.5" />
                 Godkänt{job.completed_at ? ` · ${format(new Date(job.completed_at), 'dd MMM HH:mm', { locale: sv })}` : ''}
               </div>
@@ -271,7 +271,7 @@ export default function JobReviewsPage() {
         <h1 className="text-xl font-semibold flex items-center gap-2">
           Jobbgranskning
           {needsReviewCount > 0 && (
-            <span className="text-xs font-medium px-2 py-0.5 rounded-full bg-yellow-500/15 text-yellow-400">
+            <span className="text-xs font-medium px-2 py-0.5 rounded-full bg-status-pending/15 text-status-pending">
               {needsReviewCount} väntar
             </span>
           )}

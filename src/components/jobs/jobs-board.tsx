@@ -7,26 +7,34 @@ const COLUMNS = [
   {
     key: 'not_started',
     label: 'Ej påbörjat',
-    color: '#6B6870',
-    borderColor: '#2A2A30',
+    textClass: 'text-status-not-started',
+    bgClass: 'bg-status-not-started',
+    chipClass: 'bg-status-not-started/10',
+    borderClass: 'border-border',
   },
   {
     key: 'in_progress',
     label: 'Pågående',
-    color: '#8B5CF6',
-    borderColor: '#8B5CF640',
+    textClass: 'text-status-in-progress',
+    bgClass: 'bg-status-in-progress',
+    chipClass: 'bg-status-in-progress/10',
+    borderClass: 'border-status-in-progress/25',
   },
   {
     key: 'needs_review',
     label: 'Behöver granskning',
-    color: '#C4962A',
-    borderColor: '#C4962A40',
+    textClass: 'text-status-pending',
+    bgClass: 'bg-status-pending',
+    chipClass: 'bg-status-pending/10',
+    borderClass: 'border-status-pending/25',
   },
   {
     key: 'completed',
     label: 'Klart',
-    color: '#3DAB6A',
-    borderColor: '#3DAB6A40',
+    textClass: 'text-status-completed',
+    bgClass: 'bg-status-completed',
+    chipClass: 'bg-status-completed/10',
+    borderClass: 'border-status-completed/25',
   },
 ] as const
 
@@ -38,27 +46,18 @@ export function JobsBoard({ jobs }: { jobs: CleaningJob[] }) {
         return (
           <div
             key={col.key}
-            className="rounded border bg-card overflow-hidden animate-fade-up"
-            style={{
-              borderColor: col.borderColor,
-              animationDelay: `${ci * 60}ms`,
-            }}
+            className={`rounded border bg-card overflow-hidden animate-fade-up ${col.borderClass}`}
+            style={{ animationDelay: `${ci * 60}ms` }}
           >
             {/* Column header */}
-            <div
-              className="px-3 py-2.5 border-b flex items-center justify-between"
-              style={{ borderColor: col.borderColor }}
-            >
+            <div className={`px-3 py-2.5 border-b flex items-center justify-between ${col.borderClass}`}>
               <div className="flex items-center gap-2">
-                <div className="h-1.5 w-1.5 rounded-full" style={{ background: col.color }} />
-                <span className="text-xs font-semibold" style={{ color: col.color }}>
+                <div className={`h-1.5 w-1.5 rounded-full ${col.bgClass}`} />
+                <span className={`text-xs font-semibold ${col.textClass}`}>
                   {col.label}
                 </span>
               </div>
-              <span
-                className="text-xs tabular font-medium px-1.5 py-0.5 rounded"
-                style={{ color: col.color, background: `${col.color}18` }}
-              >
+              <span className={`text-xs tabular font-medium px-1.5 py-0.5 rounded ${col.textClass} ${col.chipClass}`}>
                 {colJobs.length}
               </span>
             </div>

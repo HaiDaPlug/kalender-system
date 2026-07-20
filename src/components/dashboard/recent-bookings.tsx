@@ -2,12 +2,12 @@ import type { Booking } from '@/types'
 import { format } from 'date-fns'
 import { sv } from 'date-fns/locale'
 
-const STATUS_CONFIG: Record<string, { label: string; color: string; bg: string }> = {
-  pending:     { label: 'Väntande',   color: '#C4962A', bg: '#C4962A18' },
-  confirmed:   { label: 'Bekräftad', color: '#4A90D9', bg: '#4A90D918' },
-  in_progress: { label: 'Pågående',  color: '#8B5CF6', bg: '#8B5CF618' },
-  completed:   { label: 'Klar',      color: '#3DAB6A', bg: '#3DAB6A18' },
-  cancelled:   { label: 'Avbokad',   color: '#E05252', bg: '#E0525218' },
+const STATUS_CONFIG: Record<string, { label: string; className: string }> = {
+  pending:     { label: 'Väntande',  className: 'text-status-pending bg-status-pending/10' },
+  confirmed:   { label: 'Bekräftad', className: 'text-status-confirmed bg-status-confirmed/10' },
+  in_progress: { label: 'Pågående',  className: 'text-status-in-progress bg-status-in-progress/10' },
+  completed:   { label: 'Klar',      className: 'text-status-completed bg-status-completed/10' },
+  cancelled:   { label: 'Avbokad',   className: 'text-status-cancelled bg-status-cancelled/10' },
 }
 
 export function RecentBookings({ bookings }: { bookings: Booking[] }) {
@@ -48,8 +48,7 @@ export function RecentBookings({ bookings }: { bookings: Booking[] }) {
                     {format(new Date(booking.scheduled_at), 'dd MMM HH:mm', { locale: sv })}
                   </span>
                   <span
-                    className="text-xs px-2 py-0.5 rounded font-medium"
-                    style={{ color: cfg.color, background: cfg.bg }}
+                    className={`text-xs px-2 py-0.5 rounded font-medium ${cfg.className}`}
                   >
                     {cfg.label}
                   </span>

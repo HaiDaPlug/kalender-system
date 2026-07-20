@@ -12,11 +12,11 @@ import { cn } from '@/lib/utils/cn'
 import { JobPhotos } from '@/components/jobs/job-photos'
 
 const STATUS_OPTIONS: { value: BookingStatus; label: string; color: string }[] = [
-  { value: 'pending',     label: 'Väntar',      color: '#C4962A' },
-  { value: 'confirmed',   label: 'Bekräftad',   color: '#4A90D9' },
-  { value: 'in_progress', label: 'Pågår',       color: '#8B5CF6' },
-  { value: 'completed',   label: 'Klar',        color: '#3DAB6A' },
-  { value: 'cancelled',   label: 'Avbokad',     color: '#E05252' },
+  { value: 'pending',     label: 'Väntar',      color: 'var(--status-pending)' },
+  { value: 'confirmed',   label: 'Bekräftad',   color: 'var(--status-confirmed)' },
+  { value: 'in_progress', label: 'Pågår',       color: 'var(--status-in-progress)' },
+  { value: 'completed',   label: 'Klar',        color: 'var(--status-completed)' },
+  { value: 'cancelled',   label: 'Avbokad',     color: 'var(--status-cancelled)' },
 ]
 
 const SERVICES = [
@@ -203,7 +203,7 @@ export default function BookingDetailPage() {
         {currentStatus && (
           <span
             className="text-xs font-medium px-2.5 py-1 rounded-full"
-            style={{ color: currentStatus.color, background: `${currentStatus.color}18` }}
+            style={{ color: currentStatus.color, background: `color-mix(in srgb, ${currentStatus.color} 10%, transparent)` }}
           >
             {currentStatus.label}
           </span>
@@ -282,7 +282,7 @@ export default function BookingDetailPage() {
                 )}
                 style={{
                   color: opt.color,
-                  background: `${opt.color}18`,
+                  background: `color-mix(in srgb, ${opt.color} 10%, transparent)`,
                   outline: status === opt.value ? `1px solid ${opt.color}` : 'none',
                 }}
               >
@@ -410,7 +410,7 @@ export default function BookingDetailPage() {
       <div className="rounded border border-border bg-card px-4 py-3 flex items-center gap-2">
         <div
           className="h-2 w-2 rounded-full shrink-0"
-          style={{ background: booking?.sms_confirmation_sent ? '#3DAB6A' : '#6B6870' }}
+          style={{ background: booking?.sms_confirmation_sent ? 'var(--status-completed)' : 'var(--status-not-started)' }}
         />
         <span className="text-sm text-muted-foreground">
           SMS-bekräftelse: {booking?.sms_confirmation_sent ? 'skickad' : 'ej skickad'}
@@ -418,21 +418,21 @@ export default function BookingDetailPage() {
       </div>
 
       {error && (
-        <p className="text-xs text-red-500 bg-red-500/10 px-3 py-2 rounded">{error}</p>
+        <p className="text-xs text-destructive bg-destructive/10 px-3 py-2 rounded">{error}</p>
       )}
 
       {/* Approve / reject — visible to admin/manager when booking is pending */}
       {canApprove && (
-        <div className="rounded border border-amber-400/30 bg-amber-400/5 p-4 flex items-center justify-between gap-3">
+        <div className="rounded border border-status-pending/30 bg-status-pending/5 p-4 flex items-center justify-between gap-3">
           <div>
-            <p className="text-sm font-medium text-amber-400">Bokning väntar på godkännande</p>
+            <p className="text-sm font-medium text-status-pending">Bokning väntar på godkännande</p>
             <p className="text-xs text-muted-foreground mt-0.5">Godkänn för att bekräfta — anställd får e-post</p>
           </div>
           <div className="flex gap-2 shrink-0">
             <button
               onClick={() => void handleApprove('rejected')}
               disabled={approving}
-              className="flex items-center gap-1.5 px-3 py-1.5 text-sm rounded border border-red-500/30 text-red-400 hover:bg-red-500/10 disabled:opacity-40 transition-colors"
+              className="flex items-center gap-1.5 px-3 py-1.5 text-sm rounded border border-destructive/30 text-destructive hover:bg-destructive/10 disabled:opacity-40 transition-colors"
             >
               {approving ? <Loader2 className="h-3.5 w-3.5 animate-spin" /> : <ThumbsDown className="h-3.5 w-3.5" />}
               Avvisa
@@ -440,7 +440,7 @@ export default function BookingDetailPage() {
             <button
               onClick={() => void handleApprove('approved')}
               disabled={approving}
-              className="flex items-center gap-1.5 px-3 py-1.5 text-sm rounded bg-green-500/20 text-green-400 hover:bg-green-500/30 disabled:opacity-40 transition-colors font-medium"
+              className="flex items-center gap-1.5 px-3 py-1.5 text-sm rounded bg-status-completed/20 text-status-completed hover:bg-status-completed/30 disabled:opacity-40 transition-colors font-medium"
             >
               {approving ? <Loader2 className="h-3.5 w-3.5 animate-spin" /> : <ThumbsUp className="h-3.5 w-3.5" />}
               Godkänn
@@ -455,7 +455,7 @@ export default function BookingDetailPage() {
           <button
             onClick={handleDelete}
             disabled={deleting}
-            className="flex items-center gap-2 px-4 py-2 text-sm rounded border border-red-500/30 text-red-400 hover:bg-red-500/10 disabled:opacity-40 transition-colors"
+            className="flex items-center gap-2 px-4 py-2 text-sm rounded border border-destructive/30 text-destructive hover:bg-destructive/10 disabled:opacity-40 transition-colors"
           >
             {deleting ? <Loader2 className="h-3.5 w-3.5 animate-spin" /> : <Trash2 className="h-3.5 w-3.5" />}
             Ta bort

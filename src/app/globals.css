@@ -33,6 +33,15 @@
   --color-popover: var(--popover);
   --color-card-foreground: var(--card-foreground);
   --color-card: var(--card);
+  --color-status-pending: var(--status-pending);
+  --color-status-confirmed: var(--status-confirmed);
+  --color-status-in-progress: var(--status-in-progress);
+  --color-status-completed: var(--status-completed);
+  --color-status-cancelled: var(--status-cancelled);
+  --color-status-not-started: var(--status-not-started);
+  --color-role-admin: var(--role-admin);
+  --color-role-manager: var(--role-manager);
+  --color-role-worker: var(--role-worker);
   --radius-sm: calc(var(--radius) * 0.5);
   --radius-md: calc(var(--radius) * 0.75);
   --radius-lg: var(--radius);
@@ -40,46 +49,54 @@
 }
 
 :root {
-  /* Swedish industrial dark theme */
-  --background: #131316;
+  /* Near-neutral black — the faintest trace of warmth, restrained enough that gold is the
+     only color doing any real work. */
+  --background: #131211;
   --foreground: #E8E4DC;
-  --card: #1A1A1F;
+  --card: #191817;
   --card-foreground: #E8E4DC;
-  --popover: #1A1A1F;
+  --popover: #191817;
   --popover-foreground: #E8E4DC;
 
-  /* Swedish yellow as the single accent */
+  /* Gold — the single accent, used everywhere (buttons, links, active states, focus rings) */
   --primary: #F5C842;
-  --primary-foreground: #131316;
+  --primary-foreground: #131211;
 
-  --secondary: #202024;
+  --secondary: #201F1D;
   --secondary-foreground: #E8E4DC;
-  --muted: #202024;
-  --muted-foreground: #ACA8B3;
-  --accent: #202024;
+  --muted: #201F1D;
+  --muted-foreground: #9C9793;
+  --accent: #201F1D;
   --accent-foreground: #E8E4DC;
   --destructive: #E05252;
-  --border: #2C2C33;
-  --input: #202024;
+  --border: #2C2A27;
+  --input: #201F1D;
   --ring: #F5C842;
   --radius: 0.375rem;
 
-  /* Sidebar gets a warm gold-tinted dark tone (vs. the neutral background) so it reads as its own zone */
-  --sidebar: #17140F;
+  --sidebar: #131211;
   --sidebar-foreground: #E8E4DC;
   --sidebar-primary: #F5C842;
-  --sidebar-primary-foreground: #131316;
-  --sidebar-accent: #241F17;
+  --sidebar-primary-foreground: #131211;
+  --sidebar-accent: #201F1D;
   --sidebar-accent-foreground: #E8E4DC;
-  --sidebar-border: #332C1F;
+  --sidebar-border: #2C2A27;
   --sidebar-ring: #F5C842;
 
-  /* Status colors */
-  --status-pending: #C4962A;
-  --status-confirmed: #4A90D9;
-  --status-in-progress: #8B5CF6;
-  --status-completed: #3DAB6A;
-  --status-cancelled: #E05252;
+  /* Status colors — the familiar amber/blue/purple/green/red family, softened (lower
+     saturation, tuned value) so each stays easy on the eyes at small sizes against black,
+     while still being instantly distinguishable at a glance. */
+  --status-not-started: #8F8A80;
+  --status-pending: #D9A648;
+  --status-confirmed: #6FA3D6;
+  --status-in-progress: #A886E0;
+  --status-completed: #6FBE87;
+  --status-cancelled: #DB6D6D;
+
+  /* Role colors — reuse the status/accent palette so roles read as part of the same system */
+  --role-admin: var(--primary);
+  --role-manager: var(--status-confirmed);
+  --role-worker: var(--status-not-started);
 }
 
 @layer base {

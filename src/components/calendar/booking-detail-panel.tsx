@@ -163,7 +163,7 @@ export function BookingDetailPanel({ booking, onClose }: Props) {
               <div className="flex items-center gap-2">
                 <div
                   className="h-1.5 w-1.5 rounded-full"
-                  style={{ background: booking.sms_confirmation_sent ? '#3DAB6A' : '#6B6870' }}
+                  style={{ background: booking.sms_confirmation_sent ? 'var(--status-completed)' : 'var(--status-not-started)' }}
                 />
                 <span className="text-sm text-muted-foreground">
                   {booking.sms_confirmation_sent ? 'Skickad' : 'Ej skickad'}

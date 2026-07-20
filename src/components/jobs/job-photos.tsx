@@ -123,7 +123,7 @@ export function JobPhotos({ bookingId, workerId }: Props) {
   return (
     <div className="space-y-4">
       {error && (
-        <div className="flex items-center justify-between text-xs text-red-400 bg-red-500/10 px-3 py-2 rounded">
+        <div className="flex items-center justify-between text-xs text-destructive bg-destructive/10 px-3 py-2 rounded">
           <span>{error}</span>
           <button onClick={() => setError(null)}><X className="h-3.5 w-3.5" /></button>
         </div>
@@ -264,7 +264,7 @@ export function JobPhotos({ bookingId, workerId }: Props) {
 
       {/* Skicka in för granskning */}
       {afterImages.length > 0 && job?.status !== 'completed' && (
-        <div className="flex items-center gap-2 pt-1 text-xs text-green-400 bg-green-500/10 px-3 py-2 rounded">
+        <div className="flex items-center gap-2 pt-1 text-xs text-status-completed bg-status-completed/10 px-3 py-2 rounded">
           <CheckCircle2 className="h-3.5 w-3.5 shrink-0" />
           Bilder inskickade — väntar på granskning
         </div>

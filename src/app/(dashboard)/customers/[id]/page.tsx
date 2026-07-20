@@ -10,12 +10,12 @@ import {
 import Link from 'next/link'
 import type { Booking, SmsLog, Customer } from '@/types'
 
-const STATUS_LABEL: Record<string, { label: string; color: string }> = {
-  pending:     { label: 'Väntar',    color: '#C4962A' },
-  confirmed:   { label: 'Bekräftad', color: '#4A90D9' },
-  in_progress: { label: 'Pågår',     color: '#8B5CF6' },
-  completed:   { label: 'Klar',      color: '#3DAB6A' },
-  cancelled:   { label: 'Avbokad',   color: '#E05252' },
+const STATUS_LABEL: Record<string, { label: string; className: string }> = {
+  pending:     { label: 'Väntar',    className: 'text-status-pending bg-status-pending/10' },
+  confirmed:   { label: 'Bekräftad', className: 'text-status-confirmed bg-status-confirmed/10' },
+  in_progress: { label: 'Pågår',     className: 'text-status-in-progress bg-status-in-progress/10' },
+  completed:   { label: 'Klar',      className: 'text-status-completed bg-status-completed/10' },
+  cancelled:   { label: 'Avbokad',   className: 'text-status-cancelled bg-status-cancelled/10' },
 }
 
 const SMS_TYPE_LABEL: Record<string, string> = {
@@ -183,7 +183,7 @@ export default function CustomerHistoryPage() {
       {/* Senaste besök */}
       {lastVisit && (
         <div className="flex items-center gap-2 px-4 py-2.5 rounded border border-border bg-card">
-          <TrendingUp className="h-3.5 w-3.5 text-green-400 shrink-0" />
+          <TrendingUp className="h-3.5 w-3.5 text-status-completed shrink-0" />
           <span className="text-sm text-muted-foreground">Senaste besök:</span>
           <span className="text-sm font-medium">{formatDate(lastVisit)}</span>
         </div>
@@ -263,14 +263,13 @@ export default function CustomerHistoryPage() {
                     )}
                   </div>
                   {b.customer_notes && (
-                    <p className="text-xs mt-1.5 px-2 py-1 rounded bg-blue-500/10 text-blue-300 border border-blue-500/20 truncate">
+                    <p className="text-xs mt-1.5 px-2 py-1 rounded bg-primary/10 text-primary border border-primary/20 truncate">
                       {b.customer_notes}
                     </p>
                   )}
                 </div>
                 <span
-                  className="text-xs font-medium px-2 py-0.5 rounded shrink-0 mt-0.5"
-                  style={{ color: st?.color, background: `${st?.color}18` }}
+                  className={`text-xs font-medium px-2 py-0.5 rounded shrink-0 mt-0.5 ${st?.className ?? ''}`}
                 >
                   {st?.label}
                 </span>
@@ -294,8 +293,11 @@ export default function CustomerHistoryPage() {
                 </span>
                 <div className="flex items-center gap-1.5">
                   <div
-                    className="h-1.5 w-1.5 rounded-full"
-                    style={{ background: sms.status === 'sent' || sms.status === 'delivered' ? '#3DAB6A' : '#E05252' }}
+                    className={`h-1.5 w-1.5 rounded-full ${
+                      sms.status === 'sent' || sms.status === 'delivered'
+                        ? 'bg-status-completed'
+                        : 'bg-status-cancelled'
+                    }`}
                   />
                   <span className="text-xs text-muted-foreground">
                     {sms.sent_at ? formatDateTime(sms.sent_at) : formatDateTime(sms.created_at)}
