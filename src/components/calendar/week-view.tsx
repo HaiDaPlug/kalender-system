@@ -11,7 +11,7 @@ import {
   startOfWeek,
   addDays,
   formatTime,
-  getBookingsForDay,
+  getDaySegments,
   computeBookingLayouts,
   getWeekNumber,
 } from './calendar-utils'
@@ -123,8 +123,8 @@ export function WeekView({ current, bookings, workers = [], onSelectBooking, onB
 
           {/* Day columns */}
           {weekDays.map((day, di) => {
-            const dayBookings = getBookingsForDay(bookings, day)
-            const layouts = computeBookingLayouts(dayBookings)
+            const daySegments = getDaySegments(bookings, day)
+            const layouts = computeBookingLayouts(daySegments)
             const isToday = isSameDay(day, today)
 
             return (
@@ -171,14 +171,16 @@ export function WeekView({ current, bookings, workers = [], onSelectBooking, onB
                     }}
                   >
                     <div className="absolute inset-0 bg-primary/10 border-y border-primary/25" />
-                    <span className="absolute left-1 top-0.5 text-xs font-medium text-primary/70 tabular leading-none" style={{ fontSize: '0.6rem' }}>
-                      {String(Math.floor(hoverInfo.slot / 60)).padStart(2, '0')}:{String(hoverInfo.slot % 60).padStart(2, '0')}
-                    </span>
+                    <div className="absolute inset-0 flex items-center justify-center">
+                      <span className="text-xs font-medium text-primary/70 tabular leading-none" style={{ fontSize: '0.6rem' }}>
+                        {String(Math.floor(hoverInfo.slot / 60)).padStart(2, '0')}:{String(hoverInfo.slot % 60).padStart(2, '0')}
+                      </span>
+                    </div>
                   </div>
                 )}
 
                 {/* Bookings — lane-positioned */}
-                {layouts.map(({ booking: b, top, height, lane, totalLanes }) => {
+                {layouts.map(({ booking: b, top, height, lane, totalLanes, continuesFromPrev, continuesToNext }) => {
                   const cfg = STATUS_CONFIG[b.status]
                   const gutter = 2
                   const colW = `calc((100% - ${gutter}px) / ${totalLanes})`
@@ -186,12 +188,15 @@ export function WeekView({ current, bookings, workers = [], onSelectBooking, onB
 
                   return (
                     <div
-                      key={b.id}
+                      key={`${b.id}${continuesFromPrev ? '-cont' : ''}`}
                       onClick={() => onSelectBooking(b)}
                       role="button"
                       tabIndex={0}
                       onKeyDown={e => e.key === 'Enter' && onSelectBooking(b)}
-                      className="absolute rounded overflow-hidden cursor-pointer hover:brightness-110 transition-all z-10"
+                      className={cn(
+                        'absolute overflow-hidden cursor-pointer hover:brightness-110 transition-all z-10',
+                        continuesFromPrev ? 'rounded-b' : continuesToNext ? 'rounded-t' : 'rounded'
+                      )}
                       style={{
                         top: `${top}px`,
                         height: `${height}px`,
@@ -199,6 +204,8 @@ export function WeekView({ current, bookings, workers = [], onSelectBooking, onB
                         width: colW,
                         background: cfg.bg,
                         borderLeft: `2px solid ${cfg.color}`,
+                        borderTop: continuesFromPrev ? `2px dashed ${cfg.color}` : undefined,
+                        borderBottom: continuesToNext ? `2px dashed ${cfg.color}` : undefined,
                       }}
                       title={`${b.customer?.full_name} · ${b.service_type}`}
                     >
@@ -207,7 +214,7 @@ export function WeekView({ current, bookings, workers = [], onSelectBooking, onB
                           className="text-xs font-semibold leading-tight truncate"
                           style={{ color: cfg.color }}
                         >
-                          {formatTime(b.scheduled_at)} {b.customer?.full_name ?? '—'}
+                          {continuesFromPrev ? '↳ ' : ''}{formatTime(b.scheduled_at)} {b.customer?.full_name ?? '—'}
                         </p>
                         {height > 36 && (
                           <p className="text-xs truncate" style={{ color: cfg.color, opacity: 0.75 }}>
@@ -226,7 +233,7 @@ export function WeekView({ current, bookings, workers = [], onSelectBooking, onB
                             <div
                               className="h-1.5 w-1.5 rounded-full"
                               title={b.sms_confirmation_sent ? 'SMS skickat' : 'SMS ej skickat'}
-                              style={{ background: b.sms_confirmation_sent ? '#3DAB6A' : '#6B6870' }}
+                              style={{ background: b.sms_confirmation_sent ? 'var(--status-completed)' : 'var(--status-not-started)' }}
                             />
                           </div>
                         )}

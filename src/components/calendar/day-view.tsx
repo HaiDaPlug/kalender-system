@@ -10,9 +10,10 @@ import {
   WEEK_DAYS_SE,
   isSameDay,
   formatTime,
-  getBookingsForDay,
+  getDaySegments,
   computeBookingLayouts,
 } from './calendar-utils'
+import { cn } from '@/lib/utils/cn'
 import { useRef, useEffect, useState } from 'react'
 import { CreateBookingModal } from './create-booking-modal'
 
@@ -44,8 +45,8 @@ export function DayView({ current, bookings, workers = [], onSelectBooking, onBo
   const scrollRef = useRef<HTMLDivElement>(null)
   const today = new Date()
   const isToday = isSameDay(current, today)
-  const dayBookings = getBookingsForDay(bookings, current)
-  const layouts = computeBookingLayouts(dayBookings)
+  const daySegments = getDaySegments(bookings, current)
+  const layouts = computeBookingLayouts(daySegments)
   const dowIndex = current.getDay() === 0 ? 6 : current.getDay() - 1
   const { px: timePx } = useCurrentTime()
   const [newBookingTime, setNewBookingTime] = useState<Date | null>(null)
@@ -84,7 +85,7 @@ export function DayView({ current, bookings, workers = [], onSelectBooking, onBo
           {MONTHS_SE[current.getMonth()]} {current.getFullYear()}
         </span>
         <div className="ml-auto label-caps">
-          {dayBookings.length} {dayBookings.length === 1 ? 'bokning' : 'bokningar'}
+          {daySegments.length} {daySegments.length === 1 ? 'bokning' : 'bokningar'}
         </div>
       </div>
 
@@ -135,14 +136,16 @@ export function DayView({ current, bookings, workers = [], onSelectBooking, onBo
                 }}
               >
                 <div className="absolute inset-0 bg-primary/10 border-y border-primary/25" />
-                <span className="absolute left-2 top-1 text-xs font-medium text-primary/70 tabular leading-none">
-                  {String(Math.floor(hoverSlot / 60)).padStart(2, '0')}:{String(hoverSlot % 60).padStart(2, '0')}
-                </span>
+                <div className="absolute inset-0 flex items-center justify-center">
+                  <span className="text-xs font-medium text-primary/70 tabular leading-none">
+                    {String(Math.floor(hoverSlot / 60)).padStart(2, '0')}:{String(hoverSlot % 60).padStart(2, '0')}
+                  </span>
+                </div>
               </div>
             )}
 
             {/* Bookings — lane-positioned to avoid overlap */}
-            {layouts.map(({ booking: b, top, height, lane, totalLanes }) => {
+            {layouts.map(({ booking: b, top, height, lane, totalLanes, continuesFromPrev, continuesToNext }) => {
               const cfg = STATUS_CONFIG[b.status]
               const gutter = 4
               const colW = `calc((100% - ${gutter}px) / ${totalLanes})`
@@ -150,12 +153,15 @@ export function DayView({ current, bookings, workers = [], onSelectBooking, onBo
 
               return (
                 <div
-                  key={b.id}
+                  key={`${b.id}${continuesFromPrev ? '-cont' : ''}`}
                   onClick={() => onSelectBooking(b)}
                   role="button"
                   tabIndex={0}
                   onKeyDown={e => e.key === 'Enter' && onSelectBooking(b)}
-                  className="absolute rounded overflow-hidden cursor-pointer hover:brightness-110 transition-all z-10"
+                  className={cn(
+                    'absolute overflow-hidden cursor-pointer hover:brightness-110 transition-all z-10',
+                    continuesFromPrev ? 'rounded-b' : continuesToNext ? 'rounded-t' : 'rounded'
+                  )}
                   style={{
                     top: `${top}px`,
                     height: `${height}px`,
@@ -163,22 +169,24 @@ export function DayView({ current, bookings, workers = [], onSelectBooking, onBo
                     width: colW,
                     background: cfg.bg,
                     borderLeft: `3px solid ${cfg.color}`,
+                    borderTop: continuesFromPrev ? `2px dashed ${cfg.color}` : undefined,
+                    borderBottom: continuesToNext ? `2px dashed ${cfg.color}` : undefined,
                   }}
                 >
                   <div className="px-3 py-1.5 h-full flex flex-col gap-1 overflow-hidden">
                     <div className="flex items-center justify-between gap-2">
                       <p className="text-sm font-semibold leading-tight truncate" style={{ color: cfg.color }}>
-                        {b.customer?.full_name ?? '—'}
+                        {continuesFromPrev ? '↳ ' : ''}{b.customer?.full_name ?? '—'}
                       </p>
                       <div className="flex items-center gap-1.5 shrink-0">
                         <div
                           className="h-1.5 w-1.5 rounded-full"
                           title={b.sms_confirmation_sent ? 'SMS skickat' : 'SMS ej skickat'}
-                          style={{ background: b.sms_confirmation_sent ? '#3DAB6A' : '#6B6870' }}
+                          style={{ background: b.sms_confirmation_sent ? 'var(--status-completed)' : 'var(--status-not-started)' }}
                         />
                         <span
                           className="text-xs px-1.5 py-0.5 rounded font-medium"
-                          style={{ color: cfg.color, background: `${cfg.color}25` }}
+                          style={{ color: cfg.color, background: cfg.chipBg }}
                         >
                           {cfg.label}
                         </span>
