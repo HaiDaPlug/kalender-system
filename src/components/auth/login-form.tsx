@@ -11,6 +11,7 @@ export function LoginForm() {
   const [password, setPassword] = useState('')
   const [error, setError] = useState<string | null>(null)
   const [loading, setLoading] = useState(false)
+  const [entering, setEntering] = useState(false)
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault()
@@ -24,8 +25,18 @@ export function LoginForm() {
       return
     }
 
-    router.push('/dashboard')
+    setEntering(true)
     router.refresh()
+    setTimeout(() => router.push('/dashboard'), 700)
+  }
+
+  if (entering) {
+    return (
+      <div className="flex flex-col items-center justify-center gap-4 py-16 animate-fade-in">
+        <div className="h-8 w-8 rounded-full border-2 border-primary border-t-transparent animate-spin" />
+        <p className="text-sm text-muted-foreground">Loggar in på arbetsportalen…</p>
+      </div>
+    )
   }
 
   return (

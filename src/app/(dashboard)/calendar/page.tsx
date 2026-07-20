@@ -1,18 +1,9 @@
 import { createClient } from '@/lib/supabase/server'
-import { createServiceClient } from '@/lib/supabase/service'
 import { CalendarView } from '@/components/calendar/calendar-view'
 import type { Booking, Profile } from '@/types'
 
 export default async function CalendarPage() {
-  const sessionClient = await createClient()
-  const { data: { user } } = await sessionClient.auth.getUser()
-
-  // When auth is bypassed in proxy.ts there is no session, so RLS on the anon
-  // client returns no rows. Fall back to the service-role client in local dev
-  // only — never in production, where an unauthenticated visitor must not read
-  // all calendar data.
-  const isDev = process.env.NODE_ENV === 'development'
-  const supabase = user ? sessionClient : isDev ? createServiceClient() : sessionClient
+  const supabase = await createClient()
 
   const [{ data: bookings }, { data: workers }] = await Promise.all([
     supabase

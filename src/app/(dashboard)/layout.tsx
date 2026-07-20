@@ -1,33 +1,22 @@
+import { redirect } from 'next/navigation'
 import { createClient } from '@/lib/supabase/server'
 import { Sidebar } from '@/components/layout/sidebar'
 import { TopBar } from '@/components/layout/top-bar'
 import type { Profile } from '@/types'
 
-// Dev placeholder used when no authenticated session exists.
-// Remove once auth is enabled in proxy.ts.
-const DEV_PROFILE: Profile = {
-  id: 'dev',
-  email: 'hai@khyteteam.com',
-  full_name: 'Hai Pham Bui',
-  role: 'admin',
-  is_active: true,
-  created_at: new Date().toISOString(),
-  updated_at: new Date().toISOString(),
-}
-
 export default async function DashboardLayout({ children }: { children: React.ReactNode }) {
   const supabase = await createClient()
   const { data: { user } } = await supabase.auth.getUser()
+  if (!user) redirect('/login')
 
-  let profile: Profile = DEV_PROFILE
-  if (user) {
-    const { data } = await supabase
-      .from('profiles')
-      .select('*')
-      .eq('id', user.id)
-      .single()
-    if (data) profile = data as Profile
-  }
+  const { data } = await supabase
+    .from('profiles')
+    .select('*')
+    .eq('id', user.id)
+    .single()
+  if (!data) redirect('/login')
+
+  const profile = data as Profile
 
   return (
     <div className="flex h-screen overflow-hidden">
