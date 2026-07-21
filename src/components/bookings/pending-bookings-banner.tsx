@@ -2,6 +2,7 @@
 
 import { useState, useEffect } from 'react'
 import { Check, X, Clock, Car } from 'lucide-react'
+import { toast } from 'sonner'
 import type { Booking } from '@/types'
 
 interface Props {
@@ -17,16 +18,20 @@ function formatBookingTime(booking: Booking): string {
 export function PendingBookingsBanner({ reviewerId }: Props) {
   const [bookings, setBookings] = useState<Booking[]>([])
   const [acting, setActing]     = useState<string | null>(null)
-  const [error, setError]       = useState<string | null>(null)
 
   async function fetchPending() {
     try {
       const res = await fetch('/api/bookings?status=pending')
-      if (!res.ok) { setError('Kunde inte hämta väntande bokningar'); return }
+      if (!res.ok) {
+        toast.error('Kunde inte hämta väntande bokningar', { description: `${res.status} ${res.statusText}` })
+        return
+      }
       const data = await res.json()
       setBookings(Array.isArray(data) ? data : [])
-    } catch {
-      setError('Nätverksfel — kunde inte hämta väntande bokningar')
+    } catch (err) {
+      toast.error('Kunde inte hämta väntande bokningar', {
+        description: err instanceof Error ? err.message : 'Nätverksfel — kontrollera anslutningen',
+      })
     }
   }
 
@@ -35,17 +40,25 @@ export function PendingBookingsBanner({ reviewerId }: Props) {
     fetch('/api/bookings?status=pending')
       .then(async res => {
         if (cancelled) return
-        if (!res.ok) { setError('Kunde inte hämta väntande bokningar'); return }
+        if (!res.ok) {
+          toast.error('Kunde inte hämta väntande bokningar', { description: `${res.status} ${res.statusText}` })
+          return
+        }
         const data = await res.json()
         if (!cancelled) setBookings(Array.isArray(data) ? data : [])
       })
-      .catch(() => { if (!cancelled) setError('Nätverksfel — kunde inte hämta väntande bokningar') })
+      .catch((err) => {
+        if (!cancelled) {
+          toast.error('Kunde inte hämta väntande bokningar', {
+            description: err instanceof Error ? err.message : 'Nätverksfel — kontrollera anslutningen',
+          })
+        }
+      })
     return () => { cancelled = true }
   }, [])
 
   async function handleAction(bookingId: string, action: 'approved' | 'rejected') {
     if (!reviewerId) return
-    setError(null)
     setActing(bookingId)
     try {
       const res = await fetch('/api/bookings/approve', {
@@ -55,18 +68,23 @@ export function PendingBookingsBanner({ reviewerId }: Props) {
       })
       if (!res.ok) {
         const d = await res.json().catch(() => ({}))
-        setError(d.error ?? 'Något gick fel, försök igen')
+        toast.error('Kunde inte uppdatera bokningen', {
+          description: d.error ?? `${res.status} ${res.statusText}`,
+        })
       } else {
+        toast.success(action === 'approved' ? 'Bokningen godkändes' : 'Bokningen avvisades')
         await fetchPending()
       }
-    } catch {
-      setError('Nätverksfel — kontrollera anslutningen')
+    } catch (err) {
+      toast.error('Kunde inte uppdatera bokningen', {
+        description: err instanceof Error ? err.message : 'Nätverksfel — kontrollera anslutningen',
+      })
     } finally {
       setActing(null)
     }
   }
 
-  if (bookings.length === 0 && !error) return null
+  if (bookings.length === 0) return null
 
   return (
     <div className="rounded border border-status-pending/30 bg-status-pending/5 overflow-hidden animate-fade-up">
@@ -76,15 +94,6 @@ export function PendingBookingsBanner({ reviewerId }: Props) {
           {bookings.length} {bookings.length === 1 ? 'bokning väntar' : 'bokningar väntar'} på godkännande
         </span>
       </div>
-
-      {error && (
-        <div className="px-4 py-2 text-xs text-destructive bg-destructive/10 border-b border-destructive/20 flex items-center justify-between">
-          <span>{error}</span>
-          <button onClick={() => setError(null)} className="ml-2 hover:text-destructive/80">
-            <X className="h-3 w-3" />
-          </button>
-        </div>
-      )}
 
       <div className="divide-y divide-status-pending/10">
         {bookings.map(booking => (

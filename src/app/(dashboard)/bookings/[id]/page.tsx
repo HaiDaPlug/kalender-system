@@ -3,6 +3,7 @@
 import { useState, useEffect, useCallback } from 'react'
 import { useParams, useRouter } from 'next/navigation'
 import Link from 'next/link'
+import { toast } from 'sonner'
 import {
   ArrowLeft, Car, User, Phone, Clock, Wrench,
   MessageSquare, Loader2, Trash2, CheckCircle2, Save, History, ThumbsUp, ThumbsDown
@@ -88,7 +89,10 @@ export default function BookingDetailPage() {
   useEffect(() => {
     async function fetchWorkers() {
       const res = await fetch('/api/workers')
-      if (!res.ok) { setError('Kunde inte hämta anställda'); return }
+      if (!res.ok) {
+        toast.error('Kunde inte hämta anställda', { description: `${res.status} ${res.statusText}` })
+        return
+      }
       const data: AssignableEmployee[] = await res.json()
       setWorkers(data)
     }
@@ -106,7 +110,6 @@ export default function BookingDetailPage() {
 
   async function handleSave() {
     setSaving(true)
-    setError(null)
     const res = await fetch(`/api/bookings/${id}`, {
       method: 'PATCH',
       headers: { 'Content-Type': 'application/json' },
@@ -122,10 +125,13 @@ export default function BookingDetailPage() {
       }),
     })
     if (!res.ok) {
-      const d = await res.json()
-      setError(d.error ?? 'Kunde inte spara')
+      const d = await res.json().catch(() => ({}))
+      toast.error('Kunde inte spara bokningen', {
+        description: d.error ?? `${res.status} ${res.statusText}`,
+      })
     } else {
       setSaved(true)
+      toast.success('Bokningen sparades')
       setTimeout(() => setSaved(false), 2000)
       await fetchBooking()
     }
@@ -135,16 +141,18 @@ export default function BookingDetailPage() {
   async function handleApprove(action: 'approved' | 'rejected') {
     if (!confirm(action === 'approved' ? 'Godkänn bokningen?' : 'Avvisa bokningen?')) return
     setApproving(true)
-    setError(null)
     const res = await fetch('/api/bookings/approve', {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({ bookingId: id, action }),
     })
     if (!res.ok) {
-      const d = await res.json()
-      setError(d.error ?? 'Kunde inte uppdatera bokningen')
+      const d = await res.json().catch(() => ({}))
+      toast.error('Kunde inte uppdatera bokningen', {
+        description: d.error ?? `${res.status} ${res.statusText}`,
+      })
     } else {
+      toast.success(action === 'approved' ? 'Bokningen godkändes' : 'Bokningen avvisades')
       await fetchBooking()
     }
     setApproving(false)
@@ -153,7 +161,16 @@ export default function BookingDetailPage() {
   async function handleDelete() {
     if (!confirm('Ta bort bokningen? Det går inte att ångra.')) return
     setDeleting(true)
-    await fetch(`/api/bookings/${id}`, { method: 'DELETE' })
+    const res = await fetch(`/api/bookings/${id}`, { method: 'DELETE' })
+    if (!res.ok) {
+      const d = await res.json().catch(() => ({}))
+      toast.error('Kunde inte ta bort bokningen', {
+        description: d.error ?? `${res.status} ${res.statusText}`,
+      })
+      setDeleting(false)
+      return
+    }
+    toast.success('Bokningen togs bort')
     router.push('/calendar')
   }
 
@@ -416,10 +433,6 @@ export default function BookingDetailPage() {
           SMS-bekräftelse: {booking?.sms_confirmation_sent ? 'skickad' : 'ej skickad'}
         </span>
       </div>
-
-      {error && (
-        <p className="text-xs text-destructive bg-destructive/10 px-3 py-2 rounded">{error}</p>
-      )}
 
       {/* Approve / reject — visible to admin/manager when booking is pending */}
       {canApprove && (

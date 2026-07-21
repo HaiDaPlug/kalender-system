@@ -1,5 +1,5 @@
 # KOM-fort Bilvård — Portal: Current State
-_Last updated: 2026-07-15 (overnight bookings + hover-slot centering)_
+_Last updated: 2026-07-21 (global toast notifications)_
 
 ---
 
@@ -25,6 +25,7 @@ Built specifically for Goran's and the workers' daily workflow, not a generic ca
 | SMS | 46elks (confirmation on booking approval) |
 | Font | DM Sans + DM Mono |
 | Animations | Framer Motion (installed, used for modal/panel transitions) |
+| Notifications | Sonner (toast) — mounted once in `providers.tsx`, bottom-right |
 
 ---
 
@@ -354,6 +355,15 @@ npm run dev
 ---
 
 ## Changelog
+
+### 2026-07-21 (Global toast notifications via Sonner)
+- **Goal:** booking-creation errors were only shown as an inline red box that could be easy to miss; user asked for "loud" errors, then to extend that to a single global notification system for all success/error feedback (approvals, saves, uploads, etc.) app-wide.
+- **`sonner` installed** (no `next-themes` — this app has no active theme toggle, `.dark` class is unused dead CSS scaffolding, so the default light-styled toast is correct). `<Toaster richColors closeButton duration={8000} />` mounted once in `src/components/layout/providers.tsx`. Position started `top-right`, moved to **`bottom-right`** per user request same session.
+- **12 client components converted** from ad-hoc inline error banners (and, in several places, fully silent failures) to `toast.success(...)` / `toast.error(...)`: `create-booking-modal.tsx`, `create-shift-modal.tsx`, `pending-shifts-banner.tsx`, `pending-bookings-banner.tsx`, `job-photos.tsx`, `login-form.tsx`, `admin/sms-templates/page.tsx`, `bookings/[id]/page.tsx`, `workers/page.tsx` (incl. `WorkerRow` role/active toggle and `AddWorkerForm`), `admin/job-reviews/page.tsx`, `customers/[id]/page.tsx`, `jobs/page.tsx`.
+- **Error toasts always carry the real server message** in the `description` field (Supabase's actual `error.message`, or the API's JSON `{error}` body, falling back to `${status} ${statusText}` — never a bare generic string), so failures are diagnosable from the toast alone.
+- **Silent-failure bugs fixed as a side effect of this pass:** `bookings/[id]/page.tsx`'s `handleDelete` previously didn't check `res.ok` at all — a failed delete would still navigate back to `/calendar` with no error shown, leaving the booking undeleted with no explanation. `workers/page.tsx`'s `handleRoleChange`/`handleToggleActive` and `admin/job-reviews/page.tsx`'s `fetchJobs` / `jobs/page.tsx`'s `fetchJobs` previously had no `else` branch on fetch failure — errors (and successes) were both invisible. All now report through toast.
+- **Kept, not replaced:** inline field-level validation (login form's wrong-password message, create-shift-modal's "end time must be after start time", add-worker's "name and email required") — these stay next to the input since that's the more useful location; a toast was layered on top for the server-error cases only. Page-level `error` state that drives a persistent empty/not-found view (e.g. `bookings/[id]` "booking not found", `workers/page.tsx`'s list-load failure) was also left as page state, not converted to a toast, since it's not a transient event.
+- **Verification:** `tsc --noEmit`, `eslint` (all 14 touched files), and `next build` all clean.
 
 ### 2026-07-15 (Overnight-spanning bookings + hover-slot time centering)
 - **Problem:** a booking starting late (e.g. 23:00) with a multi-hour duration only rendered in the day it started — the block just extended past the bottom of that day's column instead of appearing at the top of the next day, since `getBookingsForDay` filtered bookings by same-day `scheduled_at` and `computeBookingLayouts` sized the block purely from `duration_minutes` with no day-boundary awareness.

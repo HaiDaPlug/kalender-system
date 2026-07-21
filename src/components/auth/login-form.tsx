@@ -2,6 +2,7 @@
 
 import { useState } from 'react'
 import { useRouter } from 'next/navigation'
+import { toast } from 'sonner'
 import { createClient } from '@/lib/supabase/client'
 
 export function LoginForm() {
@@ -21,6 +22,7 @@ export function LoginForm() {
     const { error } = await supabase.auth.signInWithPassword({ email, password })
     if (error) {
       setError('Fel e-post eller lösenord')
+      toast.error('Inloggning misslyckades', { description: error.message })
       setLoading(false)
       return
     }

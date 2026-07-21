@@ -2,6 +2,7 @@
 
 import { useState, useEffect } from 'react'
 import { Loader2, UserCheck, UserX, ChevronDown, Plus, X, Info } from 'lucide-react'
+import { toast } from 'sonner'
 import type { Profile, UserRole } from '@/types'
 import { cn } from '@/lib/utils/cn'
 
@@ -142,7 +143,15 @@ function WorkerRow({ worker, onRoleChange, onToggleActive }: {
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({ role }),
     })
-    if (res.ok) onRoleChange(worker.id, role)
+    if (res.ok) {
+      onRoleChange(worker.id, role)
+      toast.success('Rollen uppdaterades')
+    } else {
+      const d = await res.json().catch(() => ({}))
+      toast.error('Kunde inte ändra roll', {
+        description: d.error ?? `${res.status} ${res.statusText}`,
+      })
+    }
     setSaving(false)
   }
 
@@ -153,7 +162,15 @@ function WorkerRow({ worker, onRoleChange, onToggleActive }: {
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({ is_active: !worker.is_active }),
     })
-    if (res.ok) onToggleActive(worker.id, !worker.is_active)
+    if (res.ok) {
+      onToggleActive(worker.id, !worker.is_active)
+      toast.success(worker.is_active ? 'Anställd avaktiverad' : 'Anställd aktiverad')
+    } else {
+      const d = await res.json().catch(() => ({}))
+      toast.error('Kunde inte ändra status', {
+        description: d.error ?? `${res.status} ${res.statusText}`,
+      })
+    }
     setSaving(false)
   }
 
@@ -247,8 +264,15 @@ function AddWorkerForm({ onAdded }: { onAdded: (w: Profile) => void }) {
       body: JSON.stringify({ full_name: fullName, email, phone, role }),
     })
     const data = await res.json()
-    if (!res.ok) { setFormError(data.error ?? 'Kunde inte lägga till'); setSaving(false); return }
+    if (!res.ok) {
+      const message = data.error ?? `${res.status} ${res.statusText}`
+      setFormError(message)
+      toast.error('Kunde inte lägga till anställd', { description: message })
+      setSaving(false)
+      return
+    }
     onAdded(data as Profile)
+    toast.success('Anställd tillagd')
     setFullName(''); setEmail(''); setPhone(''); setRole('worker')
     setOpen(false)
     setSaving(false)
@@ -355,7 +379,13 @@ export default function WorkersPage() {
     async function load() {
       // ?all=true includes inactive employees so they can be reactivated
       const res = await fetch('/api/workers?all=true')
-      if (!res.ok) { setError('Kunde inte hämta personal'); setLoading(false); return }
+      if (!res.ok) {
+        const message = `${res.status} ${res.statusText}`
+        setError(message)
+        toast.error('Kunde inte hämta personal', { description: message })
+        setLoading(false)
+        return
+      }
       setWorkers(await res.json())
       setLoading(false)
     }

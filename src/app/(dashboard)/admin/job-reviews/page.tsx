@@ -4,6 +4,7 @@ import { useState, useEffect, useCallback } from 'react'
 import { format } from 'date-fns'
 import { sv } from 'date-fns/locale'
 import { Loader2, CheckCircle2, Clock, ChevronDown, ChevronUp, Car, User } from 'lucide-react'
+import { toast } from 'sonner'
 import type { CleaningJob } from '@/types'
 import { cn } from '@/lib/utils/cn'
 import { Lightbox } from '@/components/ui/lightbox'
@@ -47,7 +48,6 @@ function PhotoGrid({ images, type, onOpen }: {
 function JobCard({ job, onMarkDone }: { job: JobWithImages; onMarkDone: (id: string, patch: Partial<JobWithImages>) => void }) {
   const [expanded, setExpanded] = useState(job.status === 'needs_review')
   const [marking, setMarking] = useState(false)
-  const [error, setError] = useState<string | null>(null)
   const [adminComment, setAdminComment] = useState(job.admin_notes ?? '')
   const [lightbox, setLightbox] = useState<{ images: { url: string; alt: string }[]; index: number } | null>(null)
   const cfg = STATUS_CONFIG[job.status] ?? STATUS_CONFIG.not_started
@@ -70,14 +70,19 @@ function JobCard({ job, onMarkDone }: { job: JobWithImages; onMarkDone: (id: str
       })
       if (!res.ok) {
         const d = await res.json().catch(() => ({}))
-        setError(d.error ?? 'Kunde inte spara — försök igen')
+        toast.error('Kunde inte godkänna jobbet', {
+          description: d.error ?? `${res.status} ${res.statusText}`,
+        })
         return
       }
       // Pass the full API response so parent can update all fields (status, admin_notes, completed_at)
       const updated = await res.json()
       onMarkDone(job.id, updated)
-    } catch {
-      setError('Nätverksfel — kontrollera anslutningen')
+      toast.success('Jobbet godkändes')
+    } catch (err) {
+      toast.error('Kunde inte godkänna jobbet', {
+        description: err instanceof Error ? err.message : 'Nätverksfel — kontrollera anslutningen',
+      })
     } finally {
       setMarking(false)
     }
@@ -156,9 +161,6 @@ function JobCard({ job, onMarkDone }: { job: JobWithImages; onMarkDone: (id: str
 
           {job.status === 'needs_review' && (
             <div className="space-y-2">
-              {error && (
-                <p className="text-xs text-destructive bg-destructive/10 px-3 py-2 rounded">{error}</p>
-              )}
               <textarea
                 value={adminComment}
                 onChange={e => setAdminComment(e.target.value)}
@@ -222,6 +224,8 @@ export default function JobReviewsPage() {
         new Date(a.started_at ?? a.created_at).getTime()
       )
       setJobs(data)
+    } else {
+      toast.error('Kunde inte hämta jobb', { description: `${res.status} ${res.statusText}` })
     }
     setLoading(false)
   }, [])

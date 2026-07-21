@@ -2,6 +2,7 @@
 
 import { useState, useEffect, useCallback } from 'react'
 import { Check, X, Clock } from 'lucide-react'
+import { toast } from 'sonner'
 import type { Shift } from '@/types'
 
 interface Props {
@@ -32,20 +33,23 @@ function formatShiftTime(shift: Shift): string {
 export function PendingShiftsBanner({ reviewerId }: Props) {
   const [shifts, setShifts]   = useState<Shift[]>([])
   const [acting, setActing]   = useState<string | null>(null)
-  const [error, setError]     = useState<string | null>(null)
 
   const fetchPending = useCallback(async () => {
     try {
       const res = await fetch('/api/shifts?status=pending')
       if (!res.ok) {
-        setError(await readErrorMessage(res, 'Kunde inte hämta väntande pass'))
+        toast.error('Kunde inte hämta väntande pass', {
+          description: await readErrorMessage(res, `${res.status} ${res.statusText}`),
+        })
         return
       }
 
       const data = await res.json()
       setShifts(Array.isArray(data) ? data : [])
-    } catch {
-      setError('Nätverksfel — kunde inte hämta väntande pass')
+    } catch (err) {
+      toast.error('Kunde inte hämta väntande pass', {
+        description: err instanceof Error ? err.message : 'Nätverksfel — kontrollera anslutningen',
+      })
     }
   }, [])
 
@@ -53,7 +57,6 @@ export function PendingShiftsBanner({ reviewerId }: Props) {
 
   async function handleAction(shiftId: string, action: 'approved' | 'rejected') {
     if (!reviewerId) return
-    setError(null)
     setActing(shiftId)
     try {
       const res = await fetch('/api/shifts/approve', {
@@ -62,18 +65,23 @@ export function PendingShiftsBanner({ reviewerId }: Props) {
         body: JSON.stringify({ shiftId, action, reviewerId }),
       })
       if (!res.ok) {
-        setError(await readErrorMessage(res, 'Något gick fel, försök igen'))
+        toast.error('Kunde inte uppdatera passet', {
+          description: await readErrorMessage(res, `${res.status} ${res.statusText}`),
+        })
       } else {
+        toast.success(action === 'approved' ? 'Passet godkändes' : 'Passet avvisades')
         await fetchPending()
       }
-    } catch {
-      setError('Nätverksfel — kontrollera anslutningen')
+    } catch (err) {
+      toast.error('Kunde inte uppdatera passet', {
+        description: err instanceof Error ? err.message : 'Nätverksfel — kontrollera anslutningen',
+      })
     } finally {
       setActing(null)
     }
   }
 
-  if (shifts.length === 0 && !error) return null
+  if (shifts.length === 0) return null
 
   return (
     <div className="rounded border border-status-pending/30 bg-status-pending/5 overflow-hidden animate-fade-up">
@@ -83,14 +91,6 @@ export function PendingShiftsBanner({ reviewerId }: Props) {
           {shifts.length} pass väntar på godkännande
         </span>
       </div>
-      {error && (
-        <div className="px-4 py-2 text-xs text-destructive bg-destructive/10 border-b border-destructive/20 flex items-center justify-between">
-          <span>{error}</span>
-          <button onClick={() => setError(null)} className="ml-2 hover:text-destructive/80">
-            <X className="h-3 w-3" />
-          </button>
-        </div>
-      )}
       <div className="divide-y divide-status-pending/10">
         {shifts.map(shift => (
           <div key={shift.id} className="px-4 py-3 flex items-start gap-3">

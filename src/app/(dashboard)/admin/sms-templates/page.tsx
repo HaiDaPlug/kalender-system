@@ -2,6 +2,7 @@
 
 import { useState, useEffect, useRef } from 'react'
 import { Loader2, Save, MessageSquare } from 'lucide-react'
+import { toast } from 'sonner'
 import { calcSmsParts } from '@/lib/sms/sms-parts'
 
 const VARIABLE_HINTS = [
@@ -25,19 +26,23 @@ export default function SmsTemplatesPage() {
   const [notFound, setNotFound] = useState(false)
   const [saving, setSaving] = useState(false)
   const [saved, setSaved] = useState(false)
-  const [error, setError] = useState<string | null>(null)
   const textareaRef = useRef<HTMLTextAreaElement>(null)
 
   useEffect(() => {
     fetch('/api/sms-templates')
       .then(async r => {
         if (r.status === 404) { setNotFound(true); return }
-        if (!r.ok) { setError('Kunde inte ladda mall'); return }
+        if (!r.ok) {
+          toast.error('Kunde inte ladda mall', { description: `${r.status} ${r.statusText}` })
+          return
+        }
         const data: SmsTemplate = await r.json()
         setTemplate(data)
         setBody(data.body)
       })
-      .catch(() => setError('Nätverksfel — kontrollera anslutningen'))
+      .catch(err => toast.error('Kunde inte ladda mall', {
+        description: err instanceof Error ? err.message : 'Nätverksfel — kontrollera anslutningen',
+      }))
       .finally(() => setLoading(false))
   }, [])
 
@@ -61,7 +66,6 @@ export default function SmsTemplatesPage() {
   async function handleSave() {
     if (!template) return
     setSaving(true)
-    setError(null)
     setSaved(false)
     try {
       const res = await fetch('/api/sms-templates', {
@@ -71,15 +75,20 @@ export default function SmsTemplatesPage() {
       })
       if (!res.ok) {
         const d = await res.json().catch(() => ({}))
-        setError((d as { error?: string }).error ?? 'Kunde inte spara')
+        toast.error('Kunde inte spara mall', {
+          description: (d as { error?: string }).error ?? `${res.status} ${res.statusText}`,
+        })
         return
       }
       const updated: SmsTemplate = await res.json()
       setTemplate(updated)
       setSaved(true)
+      toast.success('Mallen sparades')
       setTimeout(() => setSaved(false), 3000)
-    } catch {
-      setError('Nätverksfel — kontrollera anslutningen')
+    } catch (err) {
+      toast.error('Kunde inte spara mall', {
+        description: err instanceof Error ? err.message : 'Nätverksfel — kontrollera anslutningen',
+      })
     } finally {
       setSaving(false)
     }
@@ -150,10 +159,6 @@ export default function SmsTemplatesPage() {
               )}
             </p>
           </div>
-
-          {error && (
-            <p className="text-xs text-destructive bg-destructive/10 px-3 py-2 rounded">{error}</p>
-          )}
 
           <button
             onClick={handleSave}

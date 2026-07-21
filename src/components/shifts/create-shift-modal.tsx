@@ -2,6 +2,7 @@
 
 import { useState } from 'react'
 import { X, Loader2 } from 'lucide-react'
+import { toast } from 'sonner'
 import type { Profile } from '@/types'
 import { Modal } from '@/components/ui/modal'
 
@@ -57,12 +58,17 @@ export function CreateShiftModal({ open, initialDate, currentUser, onClose, onCr
       })
 
       const data = await res.json()
-      if (!res.ok) throw new Error(data.error ?? 'Något gick fel')
+      if (!res.ok) {
+        throw new Error(data.error ?? `Passet kunde inte skapas (${res.status} ${res.statusText})`)
+      }
 
       onCreated()
       onClose()
+      toast.success('Passet skickades in', { description: 'Väntar på godkännande' })
     } catch (err) {
-      setError(err instanceof Error ? err.message : 'Något gick fel')
+      const message = err instanceof Error ? err.message : 'Något gick fel'
+      setError(message)
+      toast.error('Passet kunde inte skapas', { description: message })
     } finally {
       setLoading(false)
     }

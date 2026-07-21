@@ -1,7 +1,8 @@
 'use client'
 
 import { useState, useRef, useCallback, useEffect } from 'react'
-import { Camera, Upload, Loader2, CheckCircle2, ImageIcon, X } from 'lucide-react'
+import { Camera, Upload, Loader2, CheckCircle2, ImageIcon } from 'lucide-react'
+import { toast } from 'sonner'
 import type { CleaningJob } from '@/types'
 import { Lightbox } from '@/components/ui/lightbox'
 
@@ -22,7 +23,6 @@ export function JobPhotos({ bookingId, workerId }: Props) {
   const [images, setImages] = useState<UploadedImage[]>([])
   const [loading, setLoading] = useState(true)
   const [uploading, setUploading] = useState<'before' | 'after' | null>(null)
-  const [error, setError] = useState<string | null>(null)
   const beforeRef = useRef<HTMLInputElement>(null)
   const afterRef = useRef<HTMLInputElement>(null)
 
@@ -48,7 +48,10 @@ export function JobPhotos({ bookingId, workerId }: Props) {
       body: JSON.stringify({ booking_id: bookingId, worker_id: workerId ?? null }),
     })
     if (!res.ok) {
-      setError('Kunde inte starta jobbet')
+      const d = await res.json().catch(() => ({}))
+      toast.error('Kunde inte starta jobbet', {
+        description: d.error ?? `${res.status} ${res.statusText}`,
+      })
       return null
     }
     const created = await res.json()
@@ -57,7 +60,6 @@ export function JobPhotos({ bookingId, workerId }: Props) {
   }
 
   async function handleUpload(file: File, type: 'before' | 'after') {
-    setError(null)
     setUploading(type)
     const jobId = await ensureJob()
     if (!jobId) { setUploading(null); return }
@@ -68,8 +70,10 @@ export function JobPhotos({ bookingId, workerId }: Props) {
 
     const res = await fetch(`/api/jobs/${jobId}/images`, { method: 'POST', body: form })
     if (!res.ok) {
-      const d = await res.json()
-      setError(d.error ?? 'Uppladdning misslyckades')
+      const d = await res.json().catch(() => ({}))
+      toast.error('Uppladdning misslyckades', {
+        description: d.error ?? `${res.status} ${res.statusText}`,
+      })
     } else {
       const img = await res.json()
       setImages(prev => [...prev, img])
@@ -122,13 +126,6 @@ export function JobPhotos({ bookingId, workerId }: Props) {
 
   return (
     <div className="space-y-4">
-      {error && (
-        <div className="flex items-center justify-between text-xs text-destructive bg-destructive/10 px-3 py-2 rounded">
-          <span>{error}</span>
-          <button onClick={() => setError(null)}><X className="h-3.5 w-3.5" /></button>
-        </div>
-      )}
-
       {/* FÖRE */}
       <div className="space-y-2">
         <div className="flex items-center justify-between">

@@ -8,6 +8,7 @@ import {
   Clock, TrendingUp, Hash
 } from 'lucide-react'
 import Link from 'next/link'
+import { toast } from 'sonner'
 import type { Booking, SmsLog, Customer } from '@/types'
 
 const STATUS_LABEL: Record<string, { label: string; className: string }> = {
@@ -54,7 +55,11 @@ export default function CustomerHistoryPage() {
     setLoading(true)
     const res  = await fetch(`/api/customers/${id}`)
     const data = await res.json()
-    if (!res.ok) { setLoading(false); return }
+    if (!res.ok) {
+      toast.error('Kunde inte hämta kund', { description: data.error ?? `${res.status} ${res.statusText}` })
+      setLoading(false)
+      return
+    }
     setCustomer(data.customer)
     setBookings(data.bookings)
     setSmsLogs(data.smsLogs)
@@ -66,13 +71,21 @@ export default function CustomerHistoryPage() {
 
   async function handleSaveNotes() {
     setSaving(true)
-    await fetch(`/api/customers/${id}`, {
+    const res = await fetch(`/api/customers/${id}`, {
       method: 'PATCH',
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({ notes }),
     })
-    setSaved(true)
-    setTimeout(() => setSaved(false), 2000)
+    if (!res.ok) {
+      const d = await res.json().catch(() => ({}))
+      toast.error('Kunde inte spara anteckningar', {
+        description: d.error ?? `${res.status} ${res.statusText}`,
+      })
+    } else {
+      setSaved(true)
+      toast.success('Anteckningar sparade')
+      setTimeout(() => setSaved(false), 2000)
+    }
     setSaving(false)
   }
 

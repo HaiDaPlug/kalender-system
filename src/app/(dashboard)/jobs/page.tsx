@@ -2,6 +2,7 @@
 
 import { useState, useEffect, useCallback } from 'react'
 import { Loader2 } from 'lucide-react'
+import { toast } from 'sonner'
 import { JobsBoard } from '@/components/jobs/jobs-board'
 import type { CleaningJob } from '@/types'
 
@@ -11,7 +12,11 @@ export default function JobsPage() {
 
   const fetchJobs = useCallback(async () => {
     const res = await fetch('/api/jobs')
-    if (res.ok) setJobs(await res.json())
+    if (res.ok) {
+      setJobs(await res.json())
+    } else {
+      toast.error('Kunde inte hämta jobb', { description: `${res.status} ${res.statusText}` })
+    }
     setLoading(false)
   }, [])
 
