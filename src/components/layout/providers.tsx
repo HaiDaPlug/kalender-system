@@ -23,7 +23,22 @@ export function Providers({ children }: { children: ReactNode }) {
   return (
     <QueryClientProvider client={queryClient}>
       {children}
-      <Toaster richColors closeButton position="bottom-right" duration={8000} />
+      <Toaster
+        closeButton
+        position="bottom-right"
+        duration={8000}
+        toastOptions={{
+          classNames: {
+            toast: 'toast-premium',
+            title: 'toast-premium-title',
+            description: 'toast-premium-description',
+            icon: 'toast-premium-icon',
+            closeButton: 'toast-premium-close',
+            error: 'toast-premium-error',
+            success: 'toast-premium-success',
+          },
+        }}
+      />
       {process.env.NODE_ENV === 'development' && (
         <ReactQueryDevtools initialIsOpen={false} />
       )}

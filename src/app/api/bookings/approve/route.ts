@@ -86,8 +86,11 @@ export async function POST(request: NextRequest) {
   }
 
   // Send confirmation SMS to the customer on approval
+  let smsSent = false
+  let smsError: string | null = null
   if (body.action === 'approved' && !booking.customer?.phone) {
     console.warn(`[sms:approve] booking=${body.bookingId} — customer has no phone, skipping SMS`)
+    smsError = 'Kunden saknar telefonnummer'
   }
   if (body.action === 'approved' && booking.customer?.phone) {
     console.log(`[sms:approve] booking=${body.bookingId} — starting SMS flow`)
@@ -103,10 +106,12 @@ export async function POST(request: NextRequest) {
 
       if (templateErr) {
         console.error('[sms:approve] Template fetch error:', templateErr.message)
+        smsError = templateErr.message
         return
       }
       if (!template?.body) {
         console.warn('[sms:approve] No active template configured — skipping SMS')
+        smsError = 'Ingen aktiv SMS-mall konfigurerad'
         return
       }
       console.log('[sms:approve] Template found, inserting sms_log...')
@@ -175,6 +180,7 @@ export async function POST(request: NextRequest) {
 
       if (!logId) {
         console.warn('[sms:approve] No logId — aborting SMS send')
+        smsError = 'SMS kunde inte skickas (dubblett eller loggfel)'
         return
       }
       console.log(`[sms:approve] Calling 46elks for logId=${logId}...`)
@@ -217,9 +223,12 @@ export async function POST(request: NextRequest) {
         if (bookingFlagError) {
           console.error('[sms] Failed to set sms_confirmation_sent:', bookingFlagError.message)
         }
+        smsSent = true
+      } else {
+        smsError = result.error ?? 'SMS kunde inte skickas'
       }
     })()
   }
 
-  return NextResponse.json({ status: newStatus })
+  return NextResponse.json({ status: newStatus, smsSent, smsError })
 }

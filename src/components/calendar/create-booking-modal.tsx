@@ -86,6 +86,14 @@ export function CreateBookingModal({ open, initialDate, workers, onClose, onCrea
         throw new Error(data.error ?? `Bokningen kunde inte skapas (${res.status} ${res.statusText})`)
       }
 
+      if (data.smsSent) {
+        toast.success('SMS-bekräftelse skickad')
+      } else if (data.smsError) {
+        toast.error('SMS-bekräftelse kunde inte skickas', {
+          description: data.smsError,
+        })
+      }
+
       onCreated()
       onClose()
     } catch (err) {

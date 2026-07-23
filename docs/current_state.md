@@ -323,7 +323,7 @@ Workers document their work directly from the booking detail page (`/bookings/[i
 | ~~Auth enabled (proxy.ts is passthrough)~~ | ~~Done~~ — see Auth section (2026-07-15) |
 | Clean up dead `NODE_ENV === 'development'` bypass branches in API routes (see Auth section) | Low |
 | Storage bucket RLS policies | **Before production** |
-| SMS via 46elks — wired up, debug logs added, blocked on live test (see 2026-07-12 entry) | **In progress** |
+| SMS via 46elks — sender-ID 403 root-caused and fixed (hyphen in `FORTYSIX_ELKS_FROM`, see 2026-07-23 entry); confirm live delivery after restart | **In progress** |
 | Auto-SMS on booking create — now wired via 46elks (same path as approval) | Done |
 | Auto-SMS when car is ready | High |
 | Dashboard stats with real data (totalBookings, activeJobs, completedToday) | Medium |
@@ -472,4 +472,10 @@ npm run dev
 - **Auth hardened on booking create** — unauthenticated requests return 401 in production (matching the dev-bypass pattern used across other routes). Service client created after auth is verified. Unauthenticated fallback role changed from `admin` to `worker`.
 - **Supabase service key** — project uses `SUPABASE_SECRET_KEY` (new Supabase publishable/secret key format). `service.ts` reads this key; `NEXT_PUBLIC_SUPABASE_PUBLISHABLE_KEY` is the browser client key.
 - **Debug logs added** to `GET /api/bookings/[id]`, `POST /api/bookings/create` (SMS path), and `POST /api/bookings/approve` (SMS path) — visible in Vercel function logs, not browser devtools. Phone numbers redacted from all logs.
+
+### 2026-07-23 (SMS sender fix + toast outcome surfacing + toast polish)
+- **Root cause of 46elks 403 found:** `FORTYSIX_ELKS_FROM` was set to `KOM-FORT` — 46elks rejects hyphens in alphanumeric sender IDs (only A-Z, a-z, 0-9 allowed). Fixed to `KOMFORT` in `.env.local`. The SMS template body itself (Swedish å/ä/ö) was never the problem — that's normal Unicode SMS content, unrelated to the sender-ID charset rule.
+- **SMS outcome now surfaced to the UI, not just logged.** `POST /api/bookings/create` and `POST /api/bookings/approve` both now return `smsSent` (existing) plus a new `smsError` string describing exactly why the send failed (no active template, `sms_log` insert failure, missing customer phone, duplicate-send guard, or the 46elks error itself).
+- **Toasts wired to those fields** in `create-booking-modal.tsx`, `pending-bookings-banner.tsx`, and `bookings/[id]/page.tsx`: success toast when SMS actually sends, error toast with the reason when it doesn't. Previously `smsSent` was returned by the API but silently ignored client-side — failures (like the sender-ID 403) were invisible outside server logs.
+- **Toast visual design overhauled** (`src/components/layout/providers.tsx`, `src/app/globals.css`): dropped Sonner's `richColors` prop, which was painting the whole toast in a flat, hardcoded light pink/green fill — disconnected from the app's actual near-black gold-accent token system and low-contrast as a result. Replaced with `toastOptions.classNames` styled from the app's own tokens: toast surface is `--card` with a `1px --border`, status is carried only by a 3px left accent bar + icon color (`--destructive` red for errors, `--status-completed` green for success) rather than tinting the entire toast, title/description use `--foreground` / `--muted-foreground` for a sharp, high-contrast read, and a proper drop shadow was added so it lifts off the page. No call sites changed — this is a global restyle, so every `toast.error`/`toast.success` in the app picked up the new look automatically.
 - **Stale comment fixed** in `approve/route.ts` — stale pending rows are marked `unknown` and skipped (not failed/retried).

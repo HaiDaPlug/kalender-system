@@ -230,3 +230,54 @@ button:not(:disabled):active,
 a:active {
   transform: scale(0.97);
 }
+
+/* ── Toasts ─────────────────────────────────────────────────────────────── */
+/* Same card surface as the rest of the app — status color is carried only by
+   a left accent bar + icon, never by tinting the whole toast. Keeps the
+   message doing the talking instead of a wash of color. */
+.toast-premium {
+  background: var(--card) !important;
+  color: var(--foreground) !important;
+  border: 1px solid var(--border) !important;
+  border-left: 3px solid var(--border) !important;
+  border-radius: var(--radius-md) !important;
+  box-shadow: 0 12px 32px -8px rgba(0, 0, 0, 0.55), 0 2px 8px -2px rgba(0, 0, 0, 0.4) !important;
+  padding: 14px 16px !important;
+}
+.toast-premium-title {
+  color: var(--foreground) !important;
+  font-weight: 600 !important;
+  font-size: 0.875rem !important;
+  letter-spacing: -0.01em;
+}
+.toast-premium-description {
+  color: var(--muted-foreground) !important;
+  font-size: 0.8rem !important;
+  margin-top: 2px !important;
+}
+.toast-premium-icon {
+  align-self: flex-start;
+  margin-top: 1px;
+}
+.toast-premium-close {
+  background: var(--secondary) !important;
+  border: 1px solid var(--border) !important;
+  color: var(--muted-foreground) !important;
+}
+.toast-premium-close:hover {
+  color: var(--foreground) !important;
+}
+
+.toast-premium-error {
+  border-left-color: var(--destructive) !important;
+}
+.toast-premium-error .toast-premium-icon {
+  color: var(--destructive) !important;
+}
+
+.toast-premium-success {
+  border-left-color: var(--status-completed) !important;
+}
+.toast-premium-success .toast-premium-icon {
+  color: var(--status-completed) !important;
+}

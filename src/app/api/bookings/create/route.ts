@@ -145,6 +145,7 @@ export async function POST(request: NextRequest) {
   // 5. SMS confirmation — only for admin/manager-created confirmed bookings
   // Workers' pending bookings are not confirmed yet so no SMS is sent
   let smsSent = false
+  let smsError: string | null = null
   if (!isWorker && finalStatus === 'confirmed') {
     console.log(`[sms:create] booking=${booking.id} — starting SMS flow`)
     await (async () => {
@@ -158,10 +159,12 @@ export async function POST(request: NextRequest) {
 
       if (templateErr) {
         console.error('[sms:create] Template fetch error:', templateErr.message)
+        smsError = templateErr.message
         return
       }
       if (!template?.body) {
         console.warn('[sms:create] No active template configured — skipping SMS')
+        smsError = 'Ingen aktiv SMS-mall konfigurerad'
         return
       }
       console.log('[sms:create] Template found, inserting sms_log...')
@@ -183,6 +186,7 @@ export async function POST(request: NextRequest) {
 
       if (logErr || !logRow) {
         console.error('[sms:create] Failed to insert sms_log:', logErr?.message)
+        smsError = logErr?.message ?? 'Kunde inte logga SMS'
         return
       }
       console.log(`[sms:create] sms_log inserted id=${(logRow as { id: string }).id}, calling 46elks...`)
@@ -217,11 +221,13 @@ export async function POST(request: NextRequest) {
           .update({ sms_confirmation_sent: true })
           .eq('id', booking.id)
         smsSent = true
+      } else {
+        smsError = result.error ?? 'SMS kunde inte skickas'
       }
     })()
   } else {
     console.log(`[sms:create] booking=${booking.id} — SMS skipped (isWorker=${isWorker} status=${finalStatus})`)
   }
 
-  return NextResponse.json({ bookingId: booking.id, smsSent }, { status: 201 })
+  return NextResponse.json({ bookingId: booking.id, smsSent, smsError }, { status: 201 })
 }
