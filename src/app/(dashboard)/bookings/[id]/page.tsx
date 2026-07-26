@@ -442,6 +442,18 @@ export default function BookingDetailPage() {
         </span>
       </div>
 
+      {/* Inloggad av — who submitted the booking */}
+      {booking?.creator && (
+        <div className="rounded border border-border bg-card px-4 py-3 flex items-center gap-2">
+          <div className="h-6 w-6 rounded-full bg-primary/10 border border-primary/20 flex items-center justify-center text-xs font-semibold text-primary shrink-0">
+            {booking.creator.full_name.charAt(0)}
+          </div>
+          <span className="text-sm text-muted-foreground">
+            Inloggad av <span className="text-foreground font-medium">{booking.creator.full_name}</span>
+          </span>
+        </div>
+      )}
+
       {/* Approve / reject — visible to admin/manager when booking is pending */}
       {canApprove && (
         <div className="rounded border border-status-pending/30 bg-status-pending/5 p-4 flex items-center justify-between gap-3">

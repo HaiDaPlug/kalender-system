@@ -1,3 +1,4 @@
+import { Suspense } from 'react'
 import { LoginForm } from '@/components/auth/login-form'
 
 export default function LoginPage() {
@@ -7,7 +8,9 @@ export default function LoginPage() {
         <div className="text-center space-y-1">
           <p className="text-sm text-muted-foreground">Logga in på arbetsportalen</p>
         </div>
-        <LoginForm />
+        <Suspense fallback={null}>
+          <LoginForm />
+        </Suspense>
       </div>
     </div>
   )

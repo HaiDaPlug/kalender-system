@@ -5,6 +5,7 @@ import Link from 'next/link'
 import { useRouter, usePathname } from 'next/navigation'
 import { createClient } from '@/lib/supabase/client'
 import { cn } from '@/lib/utils/cn'
+import { getKnownAccounts, rememberAccount, forgetAccount, type KnownAccount } from '@/lib/utils/known-accounts'
 import type { Profile } from '@/types'
 import {
   LayoutDashboard,
@@ -18,6 +19,8 @@ import {
   PanelLeftOpen,
   LogOut,
   Bell,
+  ChevronsUpDown,
+  X,
 } from 'lucide-react'
 
 const COLLAPSE_STORAGE_KEY = 'sidebar-collapsed'
@@ -43,11 +46,19 @@ export function Sidebar({ profile }: { profile: Profile | null }) {
   const router = useRouter()
   const [collapsed, setCollapsed] = useState(false)
   const [accountMenuOpen, setAccountMenuOpen] = useState(false)
+  const [knownAccounts, setKnownAccounts] = useState<KnownAccount[]>([])
   const accountRef = useRef<HTMLDivElement>(null)
 
   useEffect(() => {
     setCollapsed(localStorage.getItem(COLLAPSE_STORAGE_KEY) === 'true')
   }, [])
+
+  useEffect(() => {
+    if (profile) {
+      rememberAccount({ email: profile.email, fullName: profile.full_name, role: profile.role })
+    }
+    setKnownAccounts(getKnownAccounts())
+  }, [profile])
 
   useEffect(() => {
     if (!accountMenuOpen) return
@@ -81,6 +92,18 @@ export function Sidebar({ profile }: { profile: Profile | null }) {
     await supabase.auth.signOut()
     router.push('/login')
     router.refresh()
+  }
+
+  const handleSwitchAccount = async (email: string) => {
+    const supabase = createClient()
+    await supabase.auth.signOut()
+    router.push(`/login?email=${encodeURIComponent(email)}`)
+  }
+
+  const handleForgetAccount = (e: React.MouseEvent, email: string) => {
+    e.stopPropagation()
+    forgetAccount(email)
+    setKnownAccounts(getKnownAccounts())
   }
 
   const visible = NAV.filter(item => {
@@ -161,10 +184,53 @@ export function Sidebar({ profile }: { profile: Profile | null }) {
         {accountMenuOpen && (
           <div
             className={cn(
-              'absolute z-50 w-44 rounded border border-border bg-popover shadow-md overflow-hidden animate-scale-in',
+              'absolute z-50 w-56 rounded border border-border bg-popover shadow-md overflow-hidden animate-scale-in',
               collapsed ? 'left-full bottom-2 ml-2' : 'right-2 bottom-full mb-2'
             )}
           >
+            {knownAccounts.length > 0 && (
+              <div className="py-1 border-b border-border">
+                <p className="label-caps px-3 pt-1 pb-1.5 text-muted-foreground">Konton</p>
+                {knownAccounts.map(account => {
+                  const isCurrent = account.email === profile?.email
+                  return (
+                    <div
+                      key={account.email}
+                      className="group/acc flex items-center"
+                    >
+                      <button
+                        onClick={() => !isCurrent && void handleSwitchAccount(account.email)}
+                        disabled={isCurrent}
+                        className={cn(
+                          'flex-1 min-w-0 flex items-center gap-2 px-3 py-1.5 text-sm text-left transition-colors',
+                          isCurrent
+                            ? 'text-foreground font-medium cursor-default'
+                            : 'text-muted-foreground hover:text-foreground hover:bg-secondary'
+                        )}
+                      >
+                        <div className="h-5 w-5 rounded-full bg-primary/20 border border-primary/30 flex items-center justify-center text-[10px] font-semibold text-primary shrink-0">
+                          {account.fullName?.charAt(0) ?? '?'}
+                        </div>
+                        <span className="min-w-0 flex-1">
+                          <span className="block truncate">{account.fullName}</span>
+                          <span className="block truncate text-[11px] text-muted-foreground">{account.email}</span>
+                        </span>
+                        {isCurrent && <div className="h-1.5 w-1.5 rounded-full bg-primary shrink-0" />}
+                      </button>
+                      {!isCurrent && (
+                        <button
+                          onClick={(e) => handleForgetAccount(e, account.email)}
+                          aria-label={`Glöm ${account.email}`}
+                          className="px-2 py-1.5 text-muted-foreground hover:text-destructive opacity-0 group-hover/acc:opacity-100 transition-opacity"
+                        >
+                          <X className="h-3 w-3" />
+                        </button>
+                      )}
+                    </div>
+                  )
+                })}
+              </div>
+            )}
             <button
               onClick={handleSignOut}
               className="w-full flex items-center gap-2 px-3 py-2 text-sm text-muted-foreground hover:text-foreground hover:bg-secondary transition-colors"
@@ -189,9 +255,12 @@ export function Sidebar({ profile }: { profile: Profile | null }) {
             {profile?.full_name?.charAt(0) ?? '?'}
           </div>
           {!collapsed && (
-            <div className="min-w-0">
-              <p className="text-xs font-medium text-foreground truncate">{profile?.full_name}</p>
-              <p className="label-caps mt-0.5">{ROLE_LABELS[profile?.role ?? ''] ?? profile?.role}</p>
+            <div className="min-w-0 flex-1 flex items-center justify-between gap-1">
+              <div className="min-w-0">
+                <p className="text-xs font-medium text-foreground truncate">{profile?.full_name}</p>
+                <p className="label-caps mt-0.5">{ROLE_LABELS[profile?.role ?? ''] ?? profile?.role}</p>
+              </div>
+              <ChevronsUpDown className="h-3 w-3 text-muted-foreground shrink-0" strokeWidth={1.75} />
             </div>
           )}
         </button>

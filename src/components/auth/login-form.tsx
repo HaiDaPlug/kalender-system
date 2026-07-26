@@ -1,14 +1,16 @@
 'use client'
 
 import { useState } from 'react'
-import { useRouter } from 'next/navigation'
+import { useRouter, useSearchParams } from 'next/navigation'
 import { toast } from 'sonner'
 import { createClient } from '@/lib/supabase/client'
+import { rememberAccount } from '@/lib/utils/known-accounts'
 
 export function LoginForm() {
   const router = useRouter()
+  const searchParams = useSearchParams()
   const supabase = createClient()
-  const [email, setEmail] = useState('')
+  const [email, setEmail] = useState(searchParams.get('email') ?? '')
   const [password, setPassword] = useState('')
   const [error, setError] = useState<string | null>(null)
   const [loading, setLoading] = useState(false)
@@ -25,6 +27,17 @@ export function LoginForm() {
       toast.error('Inloggning misslyckades', { description: error.message })
       setLoading(false)
       return
+    }
+
+    const { data: { user } } = await supabase.auth.getUser()
+    if (user) {
+      const { data: profile } = await supabase
+        .from('profiles')
+        .select('full_name, role')
+        .eq('id', user.id)
+        .single()
+      const p = profile as { full_name: string; role: string } | null
+      rememberAccount({ email, fullName: p?.full_name ?? email, role: p?.role ?? 'worker' })
     }
 
     setEntering(true)

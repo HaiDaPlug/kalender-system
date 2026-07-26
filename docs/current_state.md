@@ -1,5 +1,5 @@
 # KOM-fort Bilvård — Portal: Current State
-_Last updated: 2026-07-21 (global toast notifications)_
+_Last updated: 2026-07-26 (account switcher + booking creator visibility)_
 
 ---
 
@@ -95,10 +95,12 @@ src/
       jobs-board.tsx                   # ✅ Kanban board component (4 columns by status) — cards link to /bookings/[id]
       job-photos.tsx                   # ✅ Before/after photo upload component for workers
     layout/
-      sidebar.tsx                      # Side menu: Översikt, Kalender, Mina pass, Jobb, Granskning*, SMS-mallar**, Personal* (*admin/manager, **admin only). Collapsible (icon rail, persisted in localStorage). No wordmark/logo. Bottom-up: notifications bell → account section (avatar/name/role, click opens "Logga ut" popup, wired to Supabase sign-out).
+      sidebar.tsx                      # Side menu: Översikt, Kalender, Mina pass, Jobb, Granskning*, SMS-mallar**, Personal* (*admin/manager, **admin only). Collapsible (icon rail, persisted in localStorage). No wordmark/logo. Bottom-up: notifications bell → account section (avatar/name/role, click opens popup with known-accounts switcher + "Logga ut", wired to Supabase sign-out).
       top-bar.tsx                      # Top bar with page title + date only — no avatar/notifications/logout (moved into sidebar account section)
       providers.tsx
-    auth/login-form.tsx
+    auth/login-form.tsx                 # Reads ?email= to prefill (used by account switcher); remembers account (email/name/role) to localStorage on successful login
+  lib/
+    utils/known-accounts.ts             # ✅ localStorage-backed list of previously logged-in accounts (max 6) — read/written by sidebar switcher + login-form
     booking/bookings-table.tsx
     dashboard/dashboard-stats.tsx
     dashboard/recent-bookings.tsx
@@ -355,6 +357,15 @@ npm run dev
 ---
 
 ## Changelog
+
+### 2026-07-26 (Account switcher + booking creator visibility)
+- **Account switcher added to sidebar's account popup** (`sidebar.tsx`): below the avatar/name/role button, the "Logga ut" popup now also lists previously logged-in accounts (remembered locally, not a real multi-session token cache). New `src/lib/utils/known-accounts.ts` reads/writes a capped list (6 max) of `{email, fullName, role}` to `localStorage`. `login-form.tsx` calls `rememberAccount(...)` after a successful sign-in (fetches the profile row for name/role); `sidebar.tsx` also calls it on mount so switching in from a fresh session still records the account.
+- **Switching mechanism is re-auth, not true multi-session:** clicking another account in the list signs out of the current Supabase session and redirects to `/login?email=<that account>` with the email pre-filled — the user still has to enter that account's password. Chosen over keeping multiple live session tokens in `localStorage` (rejected as a bigger security surface for little gain, given this app's single-session cookie-based Supabase auth). The current account is marked with a dot and is not clickable; non-current accounts have a hover "✕" to forget them (`forgetAccount`).
+- **`/login` needed a `Suspense` boundary** (`(auth)/login/page.tsx`) — `login-form.tsx` now calls `useSearchParams()` to read `?email=`, which the Next.js App Router requires to be wrapped in `<Suspense>` or the page fails to prerender.
+- **Booking "logged in by" now visible** — `bookings.created_by` (added back in migration `007_booking_worker_submit.sql`) was tracked in the DB but never joined or displayed anywhere. Added `creator?: Profile` to the `Booking` type; `/api/bookings`, `/api/bookings/[id]` now select `creator:profiles!bookings_created_by_fkey(*)` alongside the existing `assigned_worker` join. Both routes previously selected `assigned_worker:profiles(*)` with an unqualified join — harmless while only one `profiles` FK was selected, but adding a second (`creator`) makes the join ambiguous without an explicit FK name, so `assigned_worker` was also switched to the explicit `profiles!bookings_assigned_worker_id_fkey(*)` form. FK names are Postgres's default unnamed-constraint convention (`<table>_<column>_fkey`) — `bookings_created_by_fkey` was already proven correct (used by `approve/route.ts` beforehand); `bookings_assigned_worker_id_fkey` follows the same convention but wasn't independently verified against the live DB schema.
+- **Displayed in both booking views:** `booking-detail-panel.tsx` (calendar slide-in) and `bookings/[id]/page.tsx` (full detail page) each gained an "Inloggad av {name}" row, shown only when `booking.creator` is present (i.e. always for worker-submitted bookings; absent for older/admin-direct bookings created before `created_by` existed or where it's null). Not added to `bookings-table.tsx` — that list view uses a fixed 6-column grid; adding a 7th column was judged out of scope for this pass.
+- **Correction to prior assumption:** earlier in this session the assistant assumed the Supabase project was paused for cost savings (per stale memory) — user corrected this: the project is active, just was "weirdly linked" locally. Memory updated.
+- **Verification:** `tsc --noEmit` and `eslint` clean on all touched files. Not verified against the live DB (would confirm the `bookings_assigned_worker_id_fkey` constraint name resolves) — worth a smoke test of `GET /api/bookings/[id]` next session.
 
 ### 2026-07-21 (Global toast notifications via Sonner)
 - **Goal:** booking-creation errors were only shown as an inline red box that could be easy to miss; user asked for "loud" errors, then to extend that to a single global notification system for all success/error feedback (approvals, saves, uploads, etc.) app-wide.

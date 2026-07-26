@@ -50,6 +50,7 @@ export interface Booking {
   customer_id: string
   car_id: string
   assigned_worker_id?: string
+  created_by?: string
   status: BookingStatus
   scheduled_at: string
   estimated_duration_minutes: number
@@ -68,6 +69,7 @@ export interface Booking {
   customer?: Customer
   car?: Car
   assigned_worker?: Profile
+  creator?: Profile
   cleaning_job?: CleaningJob
 }
 

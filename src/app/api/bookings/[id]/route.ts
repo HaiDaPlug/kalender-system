@@ -8,7 +8,7 @@ export async function GET(_: NextRequest, { params }: { params: Promise<{ id: st
 
   const { data, error } = await supabase
     .from('bookings')
-    .select('*, customer:customers(*), car:cars(*), assigned_worker:profiles(*), cleaning_job:cleaning_jobs(*, worker:profiles(*))')
+    .select('*, customer:customers(*), car:cars(*), assigned_worker:profiles!bookings_assigned_worker_id_fkey(*), creator:profiles!bookings_created_by_fkey(*), cleaning_job:cleaning_jobs(*, worker:profiles(*))')
     .eq('id', id)
     .single()
 

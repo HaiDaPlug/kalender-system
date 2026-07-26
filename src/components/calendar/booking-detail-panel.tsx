@@ -157,6 +157,21 @@ export function BookingDetailPanel({ booking, onClose }: Props) {
               </>
             )}
 
+            {booking.creator && (
+              <>
+                <div className="h-px bg-border" />
+                <div className="space-y-2">
+                  <p className="label-caps">Inloggad av</p>
+                  <div className="flex items-center gap-2">
+                    <div className="h-6 w-6 rounded-full bg-primary/10 border border-primary/20 flex items-center justify-center text-xs font-semibold text-primary shrink-0">
+                      {booking.creator.full_name.charAt(0)}
+                    </div>
+                    <span className="text-sm">{booking.creator.full_name}</span>
+                  </div>
+                </div>
+              </>
+            )}
+
             <div className="h-px bg-border" />
             <div className="space-y-2">
               <p className="label-caps">SMS-bekräftelse</p>
