@@ -89,9 +89,13 @@ export function CreateBookingModal({ open, initialDate, workers, onClose, onCrea
       if (data.smsSent) {
         toast.success('SMS-bekräftelse skickad')
       } else if (data.smsError) {
-        toast.error('SMS-bekräftelse kunde inte skickas', {
-          description: data.smsError,
-        })
+        const wasReverted = status === 'confirmed' && data.status === 'pending'
+        toast.error(
+          wasReverted
+            ? 'SMS kunde inte skickas — bokningen sattes till "Väntar" istället för bekräftad'
+            : 'SMS-bekräftelse kunde inte skickas',
+          { description: data.smsError },
+        )
       }
 
       onCreated()

@@ -230,5 +230,24 @@ export async function POST(request: NextRequest) {
     })()
   }
 
-  return NextResponse.json({ status: newStatus, smsSent, smsError })
+  // If the customer never actually got the confirmation SMS, don't leave the booking
+  // silently marked "confirmed" — revert it to pending so it stays visible in the
+  // pending-bookings banner and Goran can retry the approval (or delete it) instead of
+  // it looking done when it isn't.
+  let finalStatus = newStatus
+  if (body.action === 'approved' && !smsSent) {
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any
+    const { error: revertError } = await (service as any)
+      .from('bookings')
+      .update({ status: 'pending', updated_at: new Date().toISOString() })
+      .eq('id', body.bookingId)
+
+    if (revertError) {
+      console.error('[sms:approve] Failed to revert booking to pending after SMS failure:', revertError.message)
+    } else {
+      finalStatus = 'pending'
+    }
+  }
+
+  return NextResponse.json({ status: finalStatus, smsSent, smsError })
 }

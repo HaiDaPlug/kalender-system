@@ -47,15 +47,21 @@ export function LoginForm() {
 
   if (entering) {
     return (
-      <div className="flex flex-col items-center justify-center gap-4 py-16 animate-fade-in">
-        <div className="h-8 w-8 rounded-full border-2 border-primary border-t-transparent animate-spin" />
-        <p className="text-sm text-muted-foreground">Loggar in på arbetsportalen…</p>
+      <div className="flex flex-col items-center justify-center gap-6 py-20 animate-fade-in">
+        <div className="relative h-12 w-12">
+          <div className="absolute inset-0 rounded-full border-2 border-primary/15" />
+          <div className="absolute inset-0 rounded-full border-2 border-transparent border-t-primary border-r-primary/40 animate-spin [animation-duration:0.8s]" />
+        </div>
+        <p className="text-sm text-muted-foreground tracking-wide">Loggar in…</p>
       </div>
     )
   }
 
   return (
-    <form onSubmit={handleSubmit} className="space-y-4 bg-card border border-border rounded p-6">
+    <form onSubmit={handleSubmit} className="space-y-5 bg-card border border-border rounded p-7">
+      <div className="text-center space-y-1 mb-1">
+        <p className="text-sm font-medium text-foreground">Logga in på arbetsportalen</p>
+      </div>
       {error && (
         <div className="rounded bg-destructive/10 text-destructive text-sm px-3 py-2">
           {error}

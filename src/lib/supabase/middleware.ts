@@ -45,7 +45,11 @@ export async function updateSession(request: NextRequest) {
     return NextResponse.redirect(url)
   }
 
-  if (user && isAuthRoute) {
+  // Signed-in users hitting /login are normally bounced to /dashboard — except when
+  // they arrive via the account switcher (?email=...), which needs /login to actually
+  // render so they can sign out and back in as a different account.
+  const isAccountSwitch = pathname.startsWith('/login') && request.nextUrl.searchParams.has('email')
+  if (user && isAuthRoute && !isAccountSwitch) {
     const url = request.nextUrl.clone()
     url.pathname = '/dashboard'
     return NextResponse.redirect(url)

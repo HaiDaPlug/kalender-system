@@ -73,12 +73,20 @@ export function PendingBookingsBanner({ reviewerId }: Props) {
         })
       } else {
         const d = await res.json().catch(() => ({}))
-        toast.success(action === 'approved' ? 'Bokningen godkändes' : 'Bokningen avvisades')
+        const revertedToPending = action === 'approved' && d.status === 'pending'
+        if (!revertedToPending) {
+          toast.success(action === 'approved' ? 'Bokningen godkändes' : 'Bokningen avvisades')
+        }
         if (action === 'approved') {
           if (d.smsSent) {
             toast.success('SMS-bekräftelse skickad')
           } else if (d.smsError) {
-            toast.error('SMS-bekräftelse kunde inte skickas', { description: d.smsError })
+            toast.error(
+              revertedToPending
+                ? 'SMS kunde inte skickas — bokningen väntar fortfarande på godkännande'
+                : 'SMS-bekräftelse kunde inte skickas',
+              { description: d.smsError },
+            )
           }
         }
         await fetchPending()

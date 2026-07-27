@@ -229,5 +229,22 @@ export async function POST(request: NextRequest) {
     console.log(`[sms:create] booking=${booking.id} — SMS skipped (isWorker=${isWorker} status=${finalStatus})`)
   }
 
-  return NextResponse.json({ bookingId: booking.id, smsSent, smsError }, { status: 201 })
+  // Don't leave the booking looking "confirmed" if the customer never actually got the
+  // SMS — revert to pending so it surfaces in the pending-bookings banner and can be
+  // retried (or deleted) instead of silently passing as done.
+  let resultStatus: string = finalStatus
+  if (!isWorker && finalStatus === 'confirmed' && !smsSent) {
+    const { error: revertError } = await supabase
+      .from('bookings')
+      .update({ status: 'pending', updated_at: new Date().toISOString() })
+      .eq('id', booking.id)
+
+    if (revertError) {
+      console.error('[sms:create] Failed to revert booking to pending after SMS failure:', revertError.message)
+    } else {
+      resultStatus = 'pending'
+    }
+  }
+
+  return NextResponse.json({ bookingId: booking.id, status: resultStatus, smsSent, smsError }, { status: 201 })
 }
