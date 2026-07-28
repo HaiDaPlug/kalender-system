@@ -1,5 +1,5 @@
 # KOM-fort Bilvård — Portal: Current State
-_Last updated: 2026-07-26 (account switcher + booking creator visibility)_
+_Last updated: 2026-07-28 (SMS-failure booking revert, account-switcher login fix, login screen polish — booking flow QA'd end-to-end)_
 
 ---
 
@@ -157,7 +157,7 @@ supabase/
   - Unauthenticated + page route (not `/`, `/login`, `/register`, `/api/webhooks/*`) → 307 redirect to `/login`
   - Unauthenticated + `/api/*` route (excluding `/api/webhooks/*`) → `401 {"error":"unauthenticated"}` JSON, not a redirect (API callers shouldn't get an HTML page back)
   - `/api/webhooks/*` is always exempt — GHL calls this with no Supabase session at all; it authenticates via its own Ed25519 signature check instead (see GHL webhook section below)
-  - Authenticated user hitting `/login` or `/register` → redirected to `/dashboard`
+  - Authenticated user hitting `/login` or `/register` → redirected to `/dashboard`, **except** `/login?email=...` (the sidebar account switcher's link) — that's let through so a signed-in user can actually reach the login form to sign in as a different account (see 2026-07-28 changelog)
 - `DEV_PROFILE`/`DEV_USER` stubs removed from `layout.tsx`, `dashboard/page.tsx`, and the dev service-role bypass removed from `calendar/page.tsx` — all three now require a real session + profile row, redirecting to `/login` if either is missing.
 - **Known edge case, not yet hardened:** if an authenticated Supabase user has no matching `profiles` row (e.g. the `handle_new_user` trigger fails), `layout.tsx`/`dashboard/page.tsx` redirect to `/login`, but `updateSession` bounces any authenticated user away from `/login` back to `/dashboard` — this could loop. Low risk today since the trigger reliably creates the profile row, but worth a guard if account-creation paths change.
 - **Login flow:** `login-form.tsx` no longer does an instant `router.push('/dashboard')` on success — it shows a brief "Loggar in på arbetsportalen…" spinner (`entering` state, `animate-fade-in` + `animate-spin`) for ~700ms first.
@@ -300,7 +300,7 @@ Workers document their work directly from the booking detail page (`/bookings/[i
 | Route | Methods | Notes |
 |---|---|---|
 | `/api/bookings` | GET, POST | Filters: status, worker_id, from, to |
-| `/api/bookings/create` | POST | Customer+car+booking+SMS atomically |
+| `/api/bookings/create` | POST | Customer+car+booking+SMS atomically. Admin/manager bookings that default to `confirmed` revert to `pending` if the SMS send fails, instead of staying falsely confirmed |
 | `/api/bookings/[id]` | GET, PATCH, DELETE | Single booking |
 | `/api/shifts` | GET, POST | Filters: worker_id, status, from, to |
 | `/api/shifts/approve` | POST | Approve/reject (admin/manager) |
@@ -313,7 +313,7 @@ Workers document their work directly from the booking detail page (`/bookings/[i
 | `/api/workers` | GET, POST | GET: `?all=true` includes inactive; POST: invite new employee via Supabase Auth |
 | `/api/workers/[id]` | PATCH | Update role or `is_active` — admin only, uses service client |
 | `/api/me` | GET | Current user's profile (id, role, full_name); dev-stub-when-no-session branch is now dead code (see Auth section) |
-| `/api/bookings/approve` | POST | Admin/manager approves or rejects a pending booking — triggers email to worker + SMS to customer |
+| `/api/bookings/approve` | POST | Admin/manager approves or rejects a pending booking — triggers email to worker + SMS to customer. On approve, reverts status back to `pending` if the SMS send fails (see 2026-07-28 changelog) |
 | `/api/sms-templates` | GET, PATCH | GET: active template (auth required); PATCH: update body (admin only) |
 
 ---
@@ -357,6 +357,15 @@ npm run dev
 ---
 
 ## Changelog
+
+### 2026-07-28 (SMS-failure booking revert, account-switcher login fix, login screen polish — booking flow QA'd end-to-end)
+- **Root problem this session started from:** a bad `FORTYSIX_ELKS_FROM` value (fixed 2026-07-23) had exposed a deeper bug — when the confirmation SMS failed to send for any reason, the booking still ended up `confirmed` anyway. The status flip to `confirmed` in both `approve/route.ts` and `create/route.ts` happened *before* the SMS attempt, unconditionally, so a failed send was invisible in the booking's actual state (only a toast, gone as soon as it was dismissed).
+- **Fix — SMS failure now reverts the booking to `pending` instead of leaving it falsely confirmed:** `POST /api/bookings/approve` and `POST /api/bookings/create` both check `smsSent` after the send attempt; if it's `false` (any cause — no active template, missing customer phone, `sms_log` insert failure, duplicate-send guard, or the 46elks call itself failing), the booking is updated back to `status: 'pending'` and the API response's `status` field reflects the reverted value. Reused the existing `pending` status rather than adding a new one — it's already deletable by admin regardless of status, and already surfaces in the pending-bookings banner, so a failed booking is now visibly "waiting" instead of silently wrong.
+- **Toasts corrected to match:** `create-booking-modal.tsx`, `pending-bookings-banner.tsx`, and `bookings/[id]/page.tsx` previously always showed "Bokningen godkändes" (approved) on any non-error HTTP response, even when the booking had just been reverted to pending. All three now check the returned `status` and, when reverted, show "SMS kunde inte skickas — bokningen väntar fortfarande på godkännande" instead of falsely claiming success.
+- **Account switcher was dead on arrival — found and fixed:** `updateSession` (`src/lib/supabase/middleware.ts`) unconditionally redirected any signed-in user away from `/login` back to `/dashboard`, so the sidebar account switcher's `/login?email=...` link (added 2026-07-26) never actually rendered — it just bounced straight back. Fixed with a narrow carve-out: `/login` is allowed to render for a signed-in session only when the request has `?email=` (i.e. arrived via the switcher); a direct visit to `/login` while already authenticated still redirects to `/dashboard` as before.
+- **Login screen duplicate-text bug fixed:** `(auth)/login/page.tsx` rendered a static "Logga in på arbetsportalen" subtitle as a sibling of `LoginForm`, which *also* rendered its own near-identical "Loggar in på arbetsportalen…" line during the post-submit transition — two stacked, almost-identical Swedish sentences that read as a bug. Moved the title into `LoginForm` itself (which already owns the idle/entering state switch), so there's exactly one header at a time. The loading-transition spinner was also upgraded from a flat single-ring `animate-spin` to a two-layer ring (static faint track + gold arc with a tapered trailing edge), with more generous spacing (`py-20`/`gap-6`) so the transition reads as designed rather than default.
+- **QA'd live end-to-end on the deployed site, two real config bugs found and fixed along the way (not code bugs):** first, `FORTYSIX_ELKS_FROM` on Vercel still had an invalid character (same class of issue as the 2026-07-23 local fix, hadn't been mirrored to the Vercel env yet) — corrected. Second, after that fix, sends failed with `46elks 401: API access requires Basic HTTP authentication` — traced to `FORTYSIX_ELKS_API_PASSWORD` never having been set on Vercel at all (only `FORTYSIX_ELKS_API_USERNAME` was), so the Basic Auth header was malformed. Both are 46elks dashboard values (API username/password issued as a matched pair), now set correctly on Vercel. **Confirmed by the user: the full booking → approve → SMS confirmation flow now works end-to-end in production.**
+- **Verification:** `tsc --noEmit` and `eslint` clean on every touched file each pass. The SMS-revert fix was verified against a real production failure (the 401 above) — confirmed the booking correctly landed back in "Väntar" instead of "Bekräftad" — not just reasoned about from code.
 
 ### 2026-07-26 (Account switcher + booking creator visibility)
 - **Account switcher added to sidebar's account popup** (`sidebar.tsx`): below the avatar/name/role button, the "Logga ut" popup now also lists previously logged-in accounts (remembered locally, not a real multi-session token cache). New `src/lib/utils/known-accounts.ts` reads/writes a capped list (6 max) of `{email, fullName, role}` to `localStorage`. `login-form.tsx` calls `rememberAccount(...)` after a successful sign-in (fetches the profile row for name/role); `sidebar.tsx` also calls it on mount so switching in from a fresh session still records the account.
