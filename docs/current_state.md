@@ -1,5 +1,5 @@
 # KOM-fort Bilvård — Portal: Current State
-_Last updated: 2026-07-28 (SMS-failure booking revert, account-switcher login fix, login screen polish — booking flow QA'd end-to-end)_
+_Last updated: 2026-07-28 (dashboard main content scroll fix)_
 
 ---
 
@@ -357,6 +357,10 @@ npm run dev
 ---
 
 ## Changelog
+
+### 2026-07-28 (Dashboard main content scroll fix)
+- **`/bookings/[id]` was unreachable below the fold — content was clipped, not scrollable.** `(dashboard)/layout.tsx`'s `<main>` used `overflow-hidden` so the calendar and my-shifts pages (which manage their own internal `overflow-y-auto` scroll regions sized to fit exactly within `flex-1 min-h-0`) never overflow it — but plain content pages like the booking detail form, which just grow taller than the viewport, had no way to scroll to their lower sections (notes, save/delete buttons).
+- **Fix:** changed `<main>`'s `overflow-hidden` to `overflow-y-auto` in `src/app/(dashboard)/layout.tsx`. Calendar/my-shifts are unaffected since their content already fits exactly within the available height and manages its own inner scroll; pages that overflow now scroll at the `<main>` level instead of being clipped.
 
 ### 2026-07-28 (SMS-failure booking revert, account-switcher login fix, login screen polish — booking flow QA'd end-to-end)
 - **Root problem this session started from:** a bad `FORTYSIX_ELKS_FROM` value (fixed 2026-07-23) had exposed a deeper bug — when the confirmation SMS failed to send for any reason, the booking still ended up `confirmed` anyway. The status flip to `confirmed` in both `approve/route.ts` and `create/route.ts` happened *before* the SMS attempt, unconditionally, so a failed send was invisible in the booking's actual state (only a toast, gone as soon as it was dismissed).
