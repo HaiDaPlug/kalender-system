@@ -1,5 +1,5 @@
 # KOM-fort Bilvård — Portal: Current State
-_Last updated: 2026-07-28 (dashboard main content scroll fix)_
+_Last updated: 2026-07-28 (staff page role-dropdown overlap fix)_
 
 ---
 
@@ -357,6 +357,11 @@ npm run dev
 ---
 
 ## Changelog
+
+### 2026-07-28 (Staff page role-dropdown overlap fix)
+- **`/workers`'s role dropdown looked like it was rendering duplicate/overlapping content.** `RoleDropdown` (`(dashboard)/workers/page.tsx`) opened its menu with `bg-card border border-border` and a plain `shadow-lg` — but `bg-card` (`#191817`) sits almost on top of the surrounding row/table background in this near-black palette, and Tailwind's default `shadow-lg` is calibrated for light UIs, so it barely registers here. The open menu had no real visual boundary from the row content behind/below it, so it read as a badge bleeding through another badge rather than a floating menu.
+- **Fix:** switched the menu to `bg-popover` with a more visible `border-border/80`, raised its stacking (`z-50`, backdrop `z-40`, up from `z-20`/`z-10` — matches the sidebar account popup's z-index so it always wins against sibling row content), and added an explicit multi-layer `box-shadow` strong enough to read on a near-black surface (Tailwind's default shadow utilities were the underlying reason this pattern is easy to get wrong elsewhere too — worth keeping in mind for future dropdowns/popovers on this palette).
+- **Verification:** `tsc --noEmit` clean (two unrelated pre-existing errors in generated `.next/dev/types/*` files, confirmed present on `master` before this change too — a stale dev-server type-generation artifact, not a regression). `eslint` clean on the touched file.
 
 ### 2026-07-28 (Dashboard main content scroll fix)
 - **`/bookings/[id]` was unreachable below the fold — content was clipped, not scrollable.** `(dashboard)/layout.tsx`'s `<main>` used `overflow-hidden` so the calendar and my-shifts pages (which manage their own internal `overflow-y-auto` scroll regions sized to fit exactly within `flex-1 min-h-0`) never overflow it — but plain content pages like the booking detail form, which just grow taller than the viewport, had no way to scroll to their lower sections (notes, save/delete buttons).

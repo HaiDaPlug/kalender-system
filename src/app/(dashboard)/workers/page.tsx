@@ -63,8 +63,11 @@ function RoleDropdown({ current, onChange, disabled }: {
 
       {open && (
         <>
-          <div className="fixed inset-0 z-10" onClick={() => setOpen(false)} />
-          <div className="absolute right-0 top-full mt-1 z-20 bg-card border border-border rounded shadow-lg overflow-hidden min-w-36">
+          <div className="fixed inset-0 z-40" onClick={() => setOpen(false)} />
+          <div
+            className="absolute right-0 top-full mt-1.5 z-50 bg-popover border border-border/80 rounded overflow-hidden min-w-36 animate-scale-in"
+            style={{ boxShadow: '0 8px 24px -4px rgba(0,0,0,0.6), 0 2px 8px -2px rgba(0,0,0,0.5)' }}
+          >
             {(Object.keys(ROLE_CONFIG) as UserRole[]).map(role => (
               <button
                 key={role}
