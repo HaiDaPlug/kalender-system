@@ -6,6 +6,7 @@ import {
   HOURS,
   HOUR_PX,
   TIME_COL_PX,
+  TIME_COL_PX_MOBILE,
   MONTHS_SE,
   WEEK_DAYS_SE,
   isSameDay,
@@ -52,6 +53,10 @@ export function DayView({ current, bookings, workers = [], onSelectBooking, onBo
   const [newBookingTime, setNewBookingTime] = useState<Date | null>(null)
   // Vilken 30-min slot musen hovrar över (i minuter från midnatt)
   const [hoverSlot, setHoverSlot] = useState<number | null>(null)
+  // Startpunkt för pekning, för att skilja tryck från svep på mobil.
+  const pointerStart = useRef<{ x: number; y: number } | null>(null)
+  // Smal skärm = telefon; styr tidsaxelns bredd.
+  const [isNarrow, setIsNarrow] = useState(false)
 
   function getSlotFromEvent(e: React.MouseEvent<HTMLDivElement>): number {
     const scrollEl = scrollRef.current
@@ -73,6 +78,14 @@ export function DayView({ current, bookings, workers = [], onSelectBooking, onBo
   // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [])
 
+  useEffect(() => {
+    const mq = window.matchMedia('(max-width: 767px)')
+    const apply = () => setIsNarrow(mq.matches)
+    apply()
+    mq.addEventListener('change', apply)
+    return () => mq.removeEventListener('change', apply)
+  }, [])
+
   return (
     <div className="flex flex-col flex-1 min-h-0">
       {/* Day header */}
@@ -90,10 +103,14 @@ export function DayView({ current, bookings, workers = [], onSelectBooking, onBo
       </div>
 
       {/* Time grid */}
-      <div ref={scrollRef} className="flex-1 overflow-y-auto min-h-0">
+      <div ref={scrollRef} className="flex-1 overflow-y-auto min-h-0" style={{ WebkitOverflowScrolling: 'touch' }}>
         <div className="relative flex" style={{ height: `${HOURS.length * HOUR_PX}px` }}>
           {/* Hour labels */}
-          <div className="shrink-0 relative" style={{ width: TIME_COL_PX }}>
+          {/* Tidsaxeln: TIME_COL_PX_MOBILE på mobil, Hais TIME_COL_PX på desktop */}
+          <div
+            className="shrink-0 relative"
+            style={{ width: isNarrow ? TIME_COL_PX_MOBILE : TIME_COL_PX }}
+          >
             {HOURS.map(h => (
               <div key={h} className="flex items-start justify-end pr-2.5 pt-0.5" style={{ height: HOUR_PX }}>
                 <span className="label-caps tabular" style={{ fontSize: 'calc(0.65rem + 3px)' }}>{String(h).padStart(2, '0')}:00</span>
@@ -109,8 +126,17 @@ export function DayView({ current, bookings, workers = [], onSelectBooking, onBo
               setHoverSlot(getSlotFromEvent(e))
             }}
             onMouseLeave={() => setHoverSlot(null)}
+            onPointerDown={e => { pointerStart.current = { x: e.clientX, y: e.clientY } }}
             onClick={e => {
               if ((e.target as HTMLElement).closest('[role="button"]')) return
+              // Skilj tryck från svep — annars öppnas modalen vid scroll.
+              const start = pointerStart.current
+              pointerStart.current = null
+              if (start) {
+                const dx = Math.abs(e.clientX - start.x)
+                const dy = Math.abs(e.clientY - start.y)
+                if (dx > 10 || dy > 10) return
+              }
               const slot = getSlotFromEvent(e)
               const d = new Date(current)
               d.setHours(Math.floor(slot / 60), slot % 60, 0, 0)
@@ -128,7 +154,7 @@ export function DayView({ current, bookings, workers = [], onSelectBooking, onBo
             {/* Hover slot — 30-min block snapped to 15-min grid, like Google Calendar */}
             {hoverSlot !== null && (
               <div
-                className="absolute left-0 right-0 z-10 pointer-events-none"
+                className="absolute left-0 right-0 z-10 pointer-events-none hidden md:block"
                 style={{
                   top: `${(hoverSlot / 60) * HOUR_PX}px`,
                   height: `${HOUR_PX / 2}px`,

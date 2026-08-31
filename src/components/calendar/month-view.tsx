@@ -4,6 +4,7 @@ import type { Booking } from '@/types'
 import {
   STATUS_CONFIG,
   WEEK_DAYS_SE,
+  WEEK_DAYS_SE_SHORT,
   isSameDay,
   formatTime,
   getBookingsForDay,
@@ -49,8 +50,12 @@ export function MonthView({ current, bookings, onSelectBooking, onSelectDay }: P
     <div className="flex flex-col flex-1 min-h-0">
       {/* Day headers */}
       <div className="grid grid-cols-7 border-b border-border shrink-0">
-        {WEEK_DAYS_SE.map(d => (
-          <div key={d} className="py-2 text-center label-caps">{d}</div>
+        {WEEK_DAYS_SE.map((d, i) => (
+          <div key={d} className="py-2 text-center label-caps">
+            {/* Fulla namn ryms inte i 7 kolumner på mobil */}
+            <span className="md:hidden">{WEEK_DAYS_SE_SHORT[i]}</span>
+            <span className="hidden md:inline">{d}</span>
+          </div>
         ))}
       </div>
 
@@ -78,6 +83,25 @@ export function MonthView({ current, bookings, onSelectBooking, onSelectDay }: P
                 {day.getDate()}
               </span>
 
+              {/* Mobil: färgprickar. Textrader blir oläsbara i en 7-kolumners
+                  grid på telefon — tryck på dagen öppnar dagvyn istället. */}
+              <div className="flex flex-wrap gap-1 md:hidden">
+                {dayBookings.slice(0, 6).map(b => (
+                  <div
+                    key={b.id}
+                    className="h-1.5 w-1.5 rounded-full shrink-0"
+                    style={{ background: STATUS_CONFIG[b.status].color }}
+                  />
+                ))}
+                {dayBookings.length > 6 && (
+                  <span className="text-[0.55rem] leading-none text-muted-foreground">
+                    +{dayBookings.length - 6}
+                  </span>
+                )}
+              </div>
+
+              {/* Desktop: läsbara rader med tid och kundnamn */}
+              <div className="hidden md:flex md:flex-col md:gap-0.5 min-h-0">
               {dayBookings.slice(0, 3).map(b => {
                 const cfg = STATUS_CONFIG[b.status]
                 return (
@@ -98,6 +122,7 @@ export function MonthView({ current, bookings, onSelectBooking, onSelectDay }: P
               {dayBookings.length > 3 && (
                 <span className="label-caps pl-1 mt-0.5">+{dayBookings.length - 3} till</span>
               )}
+              </div>
             </div>
           )
         })}

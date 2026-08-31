@@ -90,45 +90,53 @@ export function CalendarView({ bookings, workers = [] }: Props) {
 
   return (
     <div className="relative flex flex-col flex-1 min-h-0 bg-background overflow-hidden">
-      {/* Toolbar */}
-      <div className="flex items-center gap-3 px-6 py-2.5 border-b border-border shrink-0 flex-wrap gap-y-2">
-        {/* Navigation */}
-        <div className="flex items-center gap-1">
+      {/* Toolbar — på mobil två rader (navigation överst, filter under),
+          på desktop Hais ursprungliga enradiga layout. */}
+      <div className="flex flex-col md:flex-row md:items-center md:gap-3 px-3 md:px-6 py-2 md:py-2.5 border-b border-border shrink-0 gap-y-2">
+       <div className="flex items-center gap-2 md:gap-3 md:contents">
+        {/* Navigation — större träffytor på mobil */}
+        <div className="flex items-center gap-1 shrink-0">
           <button
             onClick={() => navigate(-1)}
-            className="h-7 w-7 flex items-center justify-center rounded hover:bg-secondary transition-colors text-muted-foreground hover:text-foreground"
+            aria-label="Föregående"
+            className="h-9 w-9 md:h-7 md:w-7 flex items-center justify-center rounded hover:bg-secondary transition-colors text-muted-foreground hover:text-foreground"
           >
             <ChevronLeft className="h-4 w-4" />
           </button>
           <button
             onClick={() => navigate(1)}
-            className="h-7 w-7 flex items-center justify-center rounded hover:bg-secondary transition-colors text-muted-foreground hover:text-foreground"
+            aria-label="Nästa"
+            className="h-9 w-9 md:h-7 md:w-7 flex items-center justify-center rounded hover:bg-secondary transition-colors text-muted-foreground hover:text-foreground"
           >
             <ChevronRight className="h-4 w-4" />
           </button>
         </div>
 
-        {/* Title */}
-        <span className="text-sm font-semibold">{title}</span>
+        {/* Title — trunkeras hellre än radbryter på mobil */}
+        <span className="text-xs md:text-sm font-semibold truncate min-w-0 flex-1 md:flex-none">{title}</span>
 
         {/* View switcher */}
         <select
           value={view}
           onChange={e => setView(e.target.value as CalendarView)}
-          className="h-7 text-xs rounded border border-border bg-secondary text-foreground px-2 focus:outline-none focus:ring-1 focus:ring-primary"
+          aria-label="Vy"
+          className="h-8 md:h-7 text-xs rounded border border-border bg-secondary text-foreground px-2 focus:outline-none focus:ring-1 focus:ring-primary shrink-0"
         >
           {VIEWS.map(v => (
             <option key={v.key} value={v.key}>{v.label}</option>
           ))}
         </select>
 
-        <div className="flex-1" />
+        <div className="hidden md:block flex-1" />
+       </div>
 
+       <div className="flex items-center gap-2 md:contents">
         {/* Status filter */}
         <select
           value={statusFilter}
           onChange={e => setStatusFilter(e.target.value as BookingStatus | 'all')}
-          className="h-7 text-xs rounded border border-border bg-secondary text-foreground px-2 focus:outline-none focus:ring-1 focus:ring-primary"
+          aria-label="Statusfilter"
+          className="h-8 md:h-7 text-xs rounded border border-border bg-secondary text-foreground px-2 focus:outline-none focus:ring-1 focus:ring-primary shrink-0"
         >
           <option value="all">Alla statusar</option>
           {ALL_STATUSES.map(s => (
@@ -141,7 +149,8 @@ export function CalendarView({ bookings, workers = [] }: Props) {
           <select
             value={workerFilter}
             onChange={e => setWorkerFilter(e.target.value)}
-            className="h-7 text-xs rounded border border-border bg-secondary text-foreground px-2 focus:outline-none focus:ring-1 focus:ring-primary"
+            aria-label="Filtrera på ansvarig"
+            className="h-8 md:h-7 text-xs rounded border border-border bg-secondary text-foreground px-2 focus:outline-none focus:ring-1 focus:ring-primary shrink-0 max-w-[8rem] md:max-w-none"
           >
             <option value="all">Alla ansvariga</option>
             {workers.map(w => (
@@ -150,14 +159,18 @@ export function CalendarView({ bookings, workers = [] }: Props) {
           </select>
         )}
 
-        {/* Ny bokning */}
+        <div className="flex-1 md:hidden" />
+
+        {/* Ny bokning — bara ikon på riktigt små skärmar */}
         <button
           onClick={() => { setCreateModalTime(new Date()); setShowCreateModal(true) }}
-          className="flex items-center gap-1.5 px-2.5 py-1.5 rounded bg-primary text-primary-foreground text-xs font-medium hover:opacity-90 transition-opacity"
+          aria-label="Ny bokning"
+          className="flex items-center gap-1.5 px-2.5 py-1.5 rounded bg-primary text-primary-foreground text-xs font-medium hover:opacity-90 transition-opacity shrink-0"
         >
           <Plus className="h-3.5 w-3.5" />
-          Ny bokning
+          <span className="hidden sm:inline">Ny bokning</span>
         </button>
+       </div>
       </div>
 
       {/* Calendar body */}

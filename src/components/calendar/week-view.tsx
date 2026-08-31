@@ -7,6 +7,8 @@ import {
   WEEK_DAYS_SE,
   HOUR_PX,
   TIME_COL_PX,
+  TIME_COL_PX_MOBILE,
+  MIN_DAY_COL_PX,
   isSameDay,
   startOfWeek,
   addDays,
@@ -16,6 +18,7 @@ import {
   getWeekNumber,
 } from './calendar-utils'
 import { cn } from '@/lib/utils/cn'
+import { ChevronLeft, ChevronRight } from 'lucide-react'
 import { useRef, useEffect, useState } from 'react'
 import { CreateBookingModal } from './create-booking-modal'
 
@@ -45,6 +48,11 @@ function useCurrentTime() {
 
 export function WeekView({ current, bookings, workers = [], onSelectBooking, onBookingCreated }: Props) {
   const scrollRef = useRef<HTMLDivElement>(null)
+  // Rubrikraden scrollar i sidled i takt med rutnätet.
+  const headerScrollRef = useRef<HTMLDivElement>(null)
+  // Startpunkt för en pekning, för att skilja ett tryck från ett svep.
+  // Utan detta öppnas bokningsmodalen varje gång man swipar mellan dagar.
+  const pointerStart = useRef<{ x: number; y: number } | null>(null)
   const today = new Date()
   const weekStart = startOfWeek(current)
   const weekDays = Array.from({ length: 7 }, (_, i) => addDays(weekStart, i))
@@ -53,6 +61,45 @@ export function WeekView({ current, bookings, workers = [], onSelectBooking, onB
   const [newBookingTime, setNewBookingTime] = useState<Date | null>(null)
   // Vilken kolumn + slot musen hovrar över
   const [hoverInfo, setHoverInfo] = useState<{ dayIndex: number; slot: number } | null>(null)
+  // Smal skärm = telefonen. Styr tidsaxelns bredd och om pilarna visas.
+  const [isNarrow, setIsNarrow] = useState(false)
+  const [xScroll, setXScroll] = useState({ can: false, atStart: true, atEnd: false })
+
+  const timeColPx = isNarrow ? TIME_COL_PX_MOBILE : TIME_COL_PX
+  // På smal skärm får varje dag en minsta bredd → veckan blir bredare än
+  // skärmen och scrollar i sidled istället för att lör/sön klipps bort.
+  const gridColumns = isNarrow
+    ? `${timeColPx}px repeat(7, minmax(${MIN_DAY_COL_PX}px, 1fr))`
+    : `${TIME_COL_PX}px repeat(7, 1fr)`
+
+  function syncHeaderScroll() {
+    if (headerScrollRef.current && scrollRef.current) {
+      headerScrollRef.current.scrollLeft = scrollRef.current.scrollLeft
+    }
+  }
+
+  function updateXScroll() {
+    const el = scrollRef.current
+    if (!el) return
+    setXScroll({
+      can: el.scrollWidth > el.clientWidth + 4,
+      atStart: el.scrollLeft <= 4,
+      atEnd: el.scrollLeft >= el.scrollWidth - el.clientWidth - 4,
+    })
+  }
+
+  function handleGridScroll() {
+    syncHeaderScroll()
+    updateXScroll()
+  }
+
+  // Bläddra två dagkolumner i taget med pilknapparna.
+  function scrollByDay(dir: -1 | 1) {
+    const el = scrollRef.current
+    if (!el) return
+    const colW = (el.scrollWidth - timeColPx) / 7
+    el.scrollBy({ left: dir * colW * 2, behavior: 'smooth' })
+  }
 
   function getSlotFromEvent(e: React.MouseEvent<HTMLDivElement>): number {
     const scrollEl = scrollRef.current
@@ -66,6 +113,16 @@ export function WeekView({ current, bookings, workers = [], onSelectBooking, onB
 
   function handleColumnClick(e: React.MouseEvent<HTMLDivElement>, day: Date) {
     if ((e.target as HTMLElement).closest('[role="button"]')) return
+
+    // Rörde sig fingret? Då var det ett svep — inte ett försök att boka.
+    const start = pointerStart.current
+    pointerStart.current = null
+    if (start) {
+      const dx = Math.abs(e.clientX - start.x)
+      const dy = Math.abs(e.clientY - start.y)
+      if (dx > 10 || dy > 10) return
+    }
+
     const slot = getSlotFromEvent(e)
     const d = new Date(day)
     d.setHours(Math.floor(slot / 60), slot % 60, 0, 0)
@@ -83,11 +140,44 @@ export function WeekView({ current, bookings, workers = [], onSelectBooking, onB
   // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [])
 
+  // Följ skärmbredden. 768px matchar Tailwinds md-brytpunkt.
+  useEffect(() => {
+    const mq = window.matchMedia('(max-width: 767px)')
+    const apply = () => setIsNarrow(mq.matches)
+    apply()
+    mq.addEventListener('change', apply)
+    return () => mq.removeEventListener('change', apply)
+  }, [])
+
+  // Horisontell autoscroll till dagens kolumn + håll pilarnas läge aktuellt.
+  // Körs i rAF eftersom scrollWidth är fel innan layouten mätts klart.
+  useEffect(() => {
+    const el = scrollRef.current
+    if (!el) return
+    const id = requestAnimationFrame(() => {
+      const todayIndex = weekDays.findIndex(d => isSameDay(d, today))
+      if (todayIndex >= 0 && el.scrollWidth > el.clientWidth) {
+        const colW = (el.scrollWidth - timeColPx) / 7
+        const target = todayIndex * colW - (el.clientWidth - timeColPx - colW) / 2
+        el.scrollLeft = Math.max(0, target)
+        syncHeaderScroll()
+      }
+      updateXScroll()
+    })
+    window.addEventListener('resize', updateXScroll)
+    return () => {
+      cancelAnimationFrame(id)
+      window.removeEventListener('resize', updateXScroll)
+    }
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [current, isNarrow])
+
   return (
     <div className="flex flex-col flex-1 min-h-0">
-      {/* Day headers */}
-      <div className="grid border-b border-border shrink-0" style={{ gridTemplateColumns: `${TIME_COL_PX}px repeat(7, 1fr)` }}>
-        <div className="flex items-center justify-center">
+      {/* Day headers — scrollar i sidled i takt med rutnätet */}
+      <div ref={headerScrollRef} className="border-b border-border shrink-0 overflow-x-hidden">
+      <div className="grid" style={{ gridTemplateColumns: gridColumns }}>
+        <div className="flex items-center justify-center sticky left-0 z-20 bg-card">
           <span className="label-caps text-primary">V{weekNum}</span>
         </div>
         {weekDays.map((day, i) => {
@@ -108,12 +198,41 @@ export function WeekView({ current, bookings, workers = [], onSelectBooking, onB
           )
         })}
       </div>
+      </div>
 
-      {/* Scrollable time grid */}
-      <div ref={scrollRef} className="flex-1 overflow-y-auto min-h-0">
-        <div className="relative" style={{ gridTemplateColumns: `${TIME_COL_PX}px repeat(7, 1fr)`, display: 'grid' }}>
-          {/* Hour labels */}
-          <div className="col-start-1 relative">
+      {/* Scrollable time grid — scrollar vertikalt (timmar) och på smal skärm
+          även horisontellt (dagar). Wrappern är relative för pilknapparna. */}
+      <div className="relative flex-1 min-h-0 flex">
+        {/* Bläddringspilar — visar att veckan fortsätter utanför skärmen.
+            Endast på smal skärm och bara när det faktiskt går att scrolla. */}
+        {isNarrow && xScroll.can && !xScroll.atStart && (
+          <button
+            onClick={() => scrollByDay(-1)}
+            aria-label="Visa tidigare dagar"
+            className="absolute top-1/2 -translate-y-1/2 z-30 h-10 w-10 rounded-full bg-secondary/95 border border-border shadow-lg flex items-center justify-center text-foreground active:scale-95 transition-transform"
+            style={{ left: `${TIME_COL_PX_MOBILE + 4}px` }}
+          >
+            <ChevronLeft className="h-5 w-5" />
+          </button>
+        )}
+        {isNarrow && xScroll.can && !xScroll.atEnd && (
+          <button
+            onClick={() => scrollByDay(1)}
+            aria-label="Visa fler dagar"
+            className="absolute right-2 top-1/2 -translate-y-1/2 z-30 h-10 w-10 rounded-full bg-secondary/95 border border-border shadow-lg flex items-center justify-center text-foreground active:scale-95 transition-transform"
+          >
+            <ChevronRight className="h-5 w-5" />
+          </button>
+        )}
+      <div
+        ref={scrollRef}
+        onScroll={handleGridScroll}
+        className="flex-1 overflow-auto min-h-0 overscroll-x-contain"
+        style={{ WebkitOverflowScrolling: 'touch' }}
+      >
+        <div className="relative" style={{ gridTemplateColumns: gridColumns, display: 'grid' }}>
+          {/* Hour labels — fastnaglade till vänster vid sidledsscroll */}
+          <div className="col-start-1 relative sticky left-0 z-20 bg-card">
             {HOURS.map(h => (
               <div key={h} className="flex items-start justify-end pr-2.5 pt-0.5" style={{ height: HOUR_PX }}>
                 <span className="label-caps tabular" style={{ fontSize: 'calc(0.65rem + 3px)' }}>{String(h).padStart(2, '0')}:00</span>
@@ -131,6 +250,7 @@ export function WeekView({ current, bookings, workers = [], onSelectBooking, onB
               <div
                 key={di}
                 onClick={e => handleColumnClick(e, day)}
+                onPointerDown={e => { pointerStart.current = { x: e.clientX, y: e.clientY } }}
                 onMouseMove={e => {
                   if ((e.target as HTMLElement).closest('[role="button"]')) { setHoverInfo(null); return }
                   setHoverInfo({ dayIndex: di, slot: getSlotFromEvent(e) })
@@ -163,7 +283,7 @@ export function WeekView({ current, bookings, workers = [], onSelectBooking, onB
                 {/* Hover-slot — lyser upp med + när man rör musen */}
                 {hoverInfo?.dayIndex === di && (
                   <div
-                    className="absolute left-0 right-0 z-10 pointer-events-none"
+                    className="absolute left-0 right-0 z-10 pointer-events-none hidden md:block"
                     style={{
                       top: `${(hoverInfo.slot / 60) * HOUR_PX}px`,
                       height: `${HOUR_PX / 2}px`,
@@ -249,7 +369,7 @@ export function WeekView({ current, bookings, workers = [], onSelectBooking, onB
           {/* Current time line — spans all 7 day columns, updates every minute */}
           <div
             className="absolute left-0 right-0 z-20 pointer-events-none"
-            style={{ top: `${timePx}px`, paddingLeft: `${TIME_COL_PX}px` }}
+            style={{ top: `${timePx}px`, paddingLeft: `${timeColPx}px` }}
           >
             <div className="flex items-center">
               <div className="h-2 w-2 rounded-full bg-primary shrink-0 ml-[-4px]" />
@@ -257,6 +377,7 @@ export function WeekView({ current, bookings, workers = [], onSelectBooking, onB
             </div>
           </div>
         </div>
+      </div>
       </div>
 
       <CreateBookingModal

@@ -1,4 +1,4 @@
-import type { Metadata } from 'next'
+import type { Metadata, Viewport } from 'next'
 import { DM_Sans, DM_Mono } from 'next/font/google'
 import './globals.css'
 import { Providers } from '@/components/layout/providers'
@@ -18,6 +18,15 @@ const dmMono = DM_Mono({
 export const metadata: Metadata = {
   title: 'RenGör — Biltvätt Portal',
   description: 'Arbetsportal och bokningssystem för biltvättsoperationer',
+}
+
+// Utan denna renderar mobilen sidan som 980px bred och zoomar ut allt —
+// det var därför veckovyn klipptes av på telefonen.
+// maximumScale sätts medvetet inte: användaren ska kunna zooma.
+export const viewport: Viewport = {
+  width: 'device-width',
+  initialScale: 1,
+  themeColor: '#131211',
 }
 
 export default function RootLayout({

@@ -17,7 +17,15 @@ export const STATUS_CONFIG = {
 export const HOURS = Array.from({ length: 24 }, (_, i) => i)
 export const HOUR_PX = 60
 export const TIME_COL_PX = 80
+// Minsta bredd på en dagkolumn i veckovyn. På en telefon får inte 7 kolumner
+// plats — då scrollar veckan i sidled istället för att klippa bort lör/sön.
+// 88px ger ~4 dagar på en 390px-skärm och räcker för "08:00 Anders".
+export const MIN_DAY_COL_PX = 88
+// Tidsaxeln krymps på mobil; 80px tar för mycket av en smal skärm.
+export const TIME_COL_PX_MOBILE = 48
 export const WEEK_DAYS_SE = ['Mån', 'Tis', 'Ons', 'Tor', 'Fre', 'Lör', 'Sön']
+// Enbokstavsvarianter för trånga mobilrubriker (månadsvyn).
+export const WEEK_DAYS_SE_SHORT = ['M', 'T', 'O', 'T', 'F', 'L', 'S']
 export const MONTHS_SE = [
   'Januari', 'Februari', 'Mars', 'April', 'Maj', 'Juni',
   'Juli', 'Augusti', 'September', 'Oktober', 'November', 'December',

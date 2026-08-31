@@ -19,8 +19,9 @@ export function TopBar() {
   )?.[1] ?? 'Portal'
 
   return (
-    <header className="h-14 border-b border-border bg-background px-6 flex items-center justify-between shrink-0">
-      <div className="flex items-center gap-3">
+    <header className="h-14 border-b border-border bg-background pr-3 md:px-6 flex items-center justify-between shrink-0">
+      {/* pl-14 på mobil lämnar plats åt hamburgarknappen i hörnet */}
+      <div className="flex items-center gap-2 md:gap-3 pl-14 md:pl-0 min-w-0">
         <h1 className="text-sm font-semibold text-foreground">{title}</h1>
         <div className="h-3 w-px bg-border" />
         <span className="label-caps">

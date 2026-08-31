@@ -122,6 +122,18 @@
     font-size: 18px;
   }
 
+  /* På mobil är 18px för brett — text radbryts och knappar spränger raden.
+     Kalenderns HOUR_PX/TIME_COL_PX är i px, inte rem, så tidsrutnätets
+     geometri påverkas inte av detta.
+     OBS: sätt ALDRIG overflow-x: hidden på html/body här — det bryter
+     horisontell scroll i barnelement på iOS/Android och gjorde veckovyn
+     omöjlig att swipa. Ytor som behöver x-scroll sköter det själva. */
+  @media (max-width: 767px) {
+    html {
+      font-size: 15px;
+    }
+  }
+
   /* Scrollbar */
   ::-webkit-scrollbar {
     width: 4px;

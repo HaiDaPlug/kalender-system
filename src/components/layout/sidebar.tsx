@@ -21,6 +21,7 @@ import {
   Bell,
   ChevronsUpDown,
   X,
+  Menu,
 } from 'lucide-react'
 
 const COLLAPSE_STORAGE_KEY = 'sidebar-collapsed'
@@ -45,6 +46,9 @@ export function Sidebar({ profile }: { profile: Profile | null }) {
   const pathname = usePathname()
   const router = useRouter()
   const [collapsed, setCollapsed] = useState(false)
+  // Mobilluckan: på smal skärm ligger menyn utanför skärmen tills man
+  // trycker på hamburgaren. Påverkar inte `collapsed` (desktoplägets w-16).
+  const [mobileOpen, setMobileOpen] = useState(false)
   const [accountMenuOpen, setAccountMenuOpen] = useState(false)
   const [knownAccounts, setKnownAccounts] = useState<KnownAccount[]>([])
   const accountRef = useRef<HTMLDivElement>(null)
@@ -78,6 +82,19 @@ export function Sidebar({ profile }: { profile: Profile | null }) {
       document.removeEventListener('keydown', close)
     }
   }, [accountMenuOpen])
+
+  // Escape stänger mobilluckan, och sidan bakom ska inte kunna scrollas.
+  useEffect(() => {
+    if (!mobileOpen) return
+    const onKey = (e: KeyboardEvent) => { if (e.key === 'Escape') setMobileOpen(false) }
+    window.addEventListener('keydown', onKey)
+    const prev = document.body.style.overflow
+    document.body.style.overflow = 'hidden'
+    return () => {
+      window.removeEventListener('keydown', onKey)
+      document.body.style.overflow = prev
+    }
+  }, [mobileOpen])
 
   const toggleCollapsed = () => {
     setCollapsed(prev => {
@@ -116,10 +133,36 @@ export function Sidebar({ profile }: { profile: Profile | null }) {
     href === '/dashboard' ? pathname === href : pathname.startsWith(href)
 
   return (
+    <>
+      {/* Hamburgarknapp — ligger i topbarens vänstra hörn på mobil */}
+      <button
+        onClick={() => setMobileOpen(true)}
+        aria-label="Öppna meny"
+        aria-expanded={mobileOpen}
+        className="md:hidden fixed top-0 left-0 z-40 h-14 w-14 flex items-center justify-center text-muted-foreground active:text-foreground"
+      >
+        <Menu className="h-5 w-5" />
+      </button>
+
+      {/* Mörk bakgrund bakom den utfällda menyn */}
+      <div
+        onClick={() => setMobileOpen(false)}
+        aria-hidden="true"
+        className={cn(
+          'md:hidden fixed inset-0 z-40 bg-black/60 transition-opacity duration-200',
+          mobileOpen ? 'opacity-100' : 'opacity-0 pointer-events-none'
+        )}
+      />
+
     <aside
       className={cn(
-        'shrink-0 flex flex-col border-r border-border bg-sidebar transition-[width] duration-200',
-        collapsed ? 'w-16' : 'w-56'
+        'flex flex-col border-r border-border bg-sidebar',
+        // Mobil: fast positionerad lucka som glider in från vänster.
+        'fixed inset-y-0 left-0 z-50 w-64 transition-transform duration-200 ease-out',
+        mobileOpen ? 'translate-x-0' : '-translate-x-full',
+        // Desktop: tillbaka till Hais statiska kolumn med hopfällbart läge.
+        'md:static md:translate-x-0 md:shrink-0 md:z-auto md:transition-[width] md:duration-200',
+        collapsed ? 'md:w-16' : 'md:w-56'
       )}
     >
       <div className="h-14 border-b border-border shrink-0" />
@@ -130,6 +173,7 @@ export function Sidebar({ profile }: { profile: Profile | null }) {
           <Link
             key={href}
             href={href}
+            onClick={() => setMobileOpen(false)}
             title={collapsed ? label : undefined}
             className={cn(
               'group flex items-center gap-3 rounded px-3 py-2 text-sm transition-all duration-200',
@@ -266,5 +310,6 @@ export function Sidebar({ profile }: { profile: Profile | null }) {
         </button>
       </div>
     </aside>
+    </>
   )
 }
