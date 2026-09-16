@@ -1,6 +1,7 @@
 'use client'
 
 import { useEffect, useCallback } from 'react'
+import { createPortal } from 'react-dom'
 import { X, ChevronLeft, ChevronRight } from 'lucide-react'
 
 interface LightboxImage {
@@ -31,11 +32,14 @@ export function Lightbox({ images, index, onClose, onNavigate }: LightboxProps) 
     return () => window.removeEventListener('keydown', handleKey)
   }, [handleKey])
 
-  if (!current) return null
+  if (!current || typeof document === 'undefined') return null
 
-  return (
+  // Portal on <body>: fixed positioning must cover the whole viewport, not just
+  // the transformed content area of the app shell.
+  return createPortal(
     <div
-      className="fixed inset-0 z-50 flex items-center justify-center bg-black/90"
+      className="fixed inset-0 z-[100] flex items-center justify-center bg-black/90"
+      style={{ backdropFilter: 'blur(6px)', WebkitBackdropFilter: 'blur(6px)' }}
       onClick={onClose}
     >
       {/* Close */}
@@ -81,6 +85,7 @@ export function Lightbox({ images, index, onClose, onNavigate }: LightboxProps) 
           <ChevronRight className="h-6 w-6" />
         </button>
       )}
-    </div>
+    </div>,
+    document.body,
   )
 }

@@ -1,6 +1,7 @@
 'use client'
 
 import { useEffect, useRef, useState } from 'react'
+import { createPortal } from 'react-dom'
 
 interface ModalProps {
   open: boolean
@@ -48,19 +49,26 @@ function useDelayedUnmount(open: boolean, duration = 200) {
   return { mounted, visible }
 }
 
+/*
+  Centered dialog. Rendered in a portal on <body> so `position: fixed` always
+  means the whole viewport — inside the app shell, the page-enter animation's
+  transform would otherwise make the content area the containing block and the
+  backdrop would stop at the sidebar / top bar.
+*/
 export function Modal({ open, onClose, children, maxWidth = 'max-w-lg' }: ModalProps) {
   useEscapeKey(open, onClose)
   const { mounted, visible } = useDelayedUnmount(open, 180)
 
-  if (!mounted) return null
+  if (!mounted || typeof document === 'undefined') return null
 
-  return (
+  return createPortal(
     <div
-      className="fixed inset-0 z-50 flex items-center justify-center p-4"
+      className="fixed inset-0 z-[100] flex items-center justify-center p-4"
       style={{
-        backgroundColor: `rgba(0,0,0,${visible ? 0.6 : 0})`,
-        backdropFilter: 'blur(6px)',
-        transition: 'background-color 180ms ease',
+        backgroundColor: `rgba(0,0,0,${visible ? 0.62 : 0})`,
+        backdropFilter: visible ? 'blur(8px)' : 'blur(0px)',
+        WebkitBackdropFilter: visible ? 'blur(8px)' : 'blur(0px)',
+        transition: 'background-color 180ms ease, backdrop-filter 180ms ease',
       }}
       onClick={e => { if (e.target === e.currentTarget) onClose() }}
     >
@@ -78,10 +86,13 @@ export function Modal({ open, onClose, children, maxWidth = 'max-w-lg' }: ModalP
       >
         {children}
       </div>
-    </div>
+    </div>,
+    document.body,
   )
 }
 
+// Slides in from the right edge of the nearest positioned ancestor (the calendar
+// body) — intentionally not a portal, it belongs to that area.
 export function SidePanel({ open, onClose, children, width = 'w-80' }: SidePanelProps) {
   useEscapeKey(open, onClose)
   const { mounted, visible } = useDelayedUnmount(open, 200)
@@ -91,7 +102,7 @@ export function SidePanel({ open, onClose, children, width = 'w-80' }: SidePanel
   return (
     <>
       <div
-        className="fixed inset-0 z-30"
+        className="absolute inset-0 z-30"
         style={{
           opacity: visible ? 1 : 0,
           transition: 'opacity 200ms ease',
