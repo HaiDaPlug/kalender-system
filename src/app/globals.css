@@ -138,6 +138,18 @@
     -webkit-font-smoothing: antialiased;
   }
 
+  /* On phones 18px is too wide — text wraps and buttons break the row. The
+     calendar's HOUR_PX / TIME_COL_PX are px, not rem, so grid geometry is
+     unaffected.
+     NEVER set overflow-x: hidden on html/body: it breaks horizontal scrolling
+     in child elements on iOS/Android and made the week view impossible to
+     swipe. Areas that need x-scroll handle it themselves. */
+  @media (max-width: 767px) {
+    html {
+      font-size: 15px;
+    }
+  }
+
   ::selection {
     background: color-mix(in srgb, var(--primary) 35%, transparent);
     color: var(--foreground);

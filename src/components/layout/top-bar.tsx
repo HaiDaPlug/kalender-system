@@ -26,8 +26,9 @@ export function TopBar() {
   const today = new Date().toLocaleDateString('sv-SE', { weekday: 'long', day: 'numeric', month: 'long' })
 
   return (
-    <header className="h-14 border-b border-border bg-background px-6 flex items-center justify-between shrink-0">
-      <div className="flex items-center gap-3 min-w-0">
+    <header className="h-14 border-b border-border bg-background pr-3 md:px-6 flex items-center justify-between shrink-0">
+      {/* pl-14 on phones leaves room for the sidebar's hamburger button in the corner */}
+      <div className="flex items-center gap-2 md:gap-3 pl-14 md:pl-0 min-w-0">
         <h1 className="text-[0.95rem] font-semibold text-foreground tracking-tight truncate">{title}</h1>
         <div className="h-3.5 w-px bg-border-strong" />
         <span className="label-caps capitalize" suppressHydrationWarning>{today}</span>

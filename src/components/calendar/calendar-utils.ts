@@ -37,6 +37,15 @@ export const STATUS_CONFIG: Record<BookingStatus, CalendarStatusStyle> = {
 export const HOURS = Array.from({ length: 24 }, (_, i) => i)
 export const HOUR_PX = 60
 export const TIME_COL_PX = 80
+// Phones: the hour column shrinks, and each day column gets a minimum width so
+// the week scrolls sideways instead of clipping Sat/Sun. 88px ≈ 4 days on a
+// 390px screen and fits "08:00 Anders".
+export const TIME_COL_PX_MOBILE = 48
+export const MIN_DAY_COL_PX = 88
+// One-letter weekday labels for the month view on narrow screens.
+export const WEEK_DAYS_SE_SHORT = ['M', 'T', 'O', 'T', 'F', 'L', 'S']
+// Swipe vs. tap: a pointer that moved more than this before "click" was a scroll.
+export const TAP_TOLERANCE_PX = 10
 // Hours outside this window are shaded in the day/week grids.
 export const WORK_START_HOUR = 7
 export const WORK_END_HOUR = 19

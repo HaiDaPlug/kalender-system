@@ -23,7 +23,7 @@ function Section({ title, children }: { title: string; children: React.ReactNode
 
 export function BookingDetailPanel({ booking, onClose }: Props) {
   return (
-    <SidePanel open={booking !== null} onClose={onClose} width="w-[22rem]">
+    <SidePanel open={booking !== null} onClose={onClose} width="w-[85%] max-w-sm sm:w-[22rem]">
       {booking && (
         <>
           {/* Header */}

@@ -130,7 +130,7 @@ export function CalendarView({ bookings, workers = [] }: Props) {
   return (
     <div className="relative flex flex-col flex-1 min-h-0 bg-background overflow-hidden">
       {/* Toolbar — navigation + title on the left, "Ny bokning" always top right */}
-      <div className="flex items-center gap-3 px-5 py-2.5 border-b border-border shrink-0">
+      <div className="flex items-center gap-2 md:gap-3 px-3 md:px-5 py-2 md:py-2.5 border-b border-border shrink-0">
         <div className="flex items-center gap-0.5 shrink-0">
           <button onClick={() => navigate(-1)} aria-label="Föregående" title="Föregående (←)" className="btn btn-ghost btn-icon btn-sm">
             <ChevronLeft />
@@ -141,16 +141,18 @@ export function CalendarView({ bookings, workers = [] }: Props) {
         </div>
 
         <div className="flex items-baseline gap-2.5 min-w-0">
-          <span className="text-[1.05rem] font-semibold tracking-tight truncate">{title}</span>
-          {hint && <span className="label-caps hidden sm:inline truncate">{hint}</span>}
+          <span className="text-[0.95rem] md:text-[1.05rem] font-semibold tracking-tight truncate">{title}</span>
+          {hint && <span className="label-caps hidden md:inline truncate">{hint}</span>}
         </div>
 
+        {/* Icon-only on very small screens */}
         <button
           onClick={() => { setCreateModalTime(new Date()); setShowCreateModal(true) }}
+          aria-label="Ny bokning"
           className="btn btn-primary btn-sm ml-auto shrink-0"
         >
           <Plus />
-          Ny bokning
+          <span className="hidden sm:inline">Ny bokning</span>
         </button>
       </div>
 
@@ -191,8 +193,8 @@ export function CalendarView({ bookings, workers = [] }: Props) {
       </div>
 
       {/* Bottom bar — view + worker controls on the left, status filter chips on the right */}
-      <div className="flex items-center gap-3 px-4 py-2 border-t border-border shrink-0 flex-wrap gap-y-2">
-        <div className="flex items-center gap-2 shrink-0">
+      <div className="flex items-center gap-3 px-3 md:px-4 py-2 border-t border-border shrink-0 flex-wrap gap-y-2">
+        <div className="flex items-center gap-2 shrink-0 min-w-0">
           <select
             value={view}
             onChange={e => setView(e.target.value as CalendarView)}
@@ -209,7 +211,7 @@ export function CalendarView({ bookings, workers = [] }: Props) {
               value={workerFilter}
               onChange={e => setWorkerFilter(e.target.value)}
               aria-label="Ansvarig"
-              className="field field-sm w-auto max-w-[12rem]"
+              className="field field-sm w-auto max-w-[9rem] md:max-w-[12rem]"
             >
               <option value="all">Alla ansvariga</option>
               {workers.map(w => (

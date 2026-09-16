@@ -63,7 +63,7 @@ export function Modal({ open, onClose, children, maxWidth = 'max-w-lg' }: ModalP
 
   return createPortal(
     <div
-      className="fixed inset-0 z-[100] flex items-center justify-center p-4"
+      className="fixed inset-0 z-[100] flex items-center justify-center p-2 sm:p-4"
       style={{
         backgroundColor: `rgba(0,0,0,${visible ? 0.62 : 0})`,
         backdropFilter: visible ? 'blur(8px)' : 'blur(0px)',
@@ -75,7 +75,7 @@ export function Modal({ open, onClose, children, maxWidth = 'max-w-lg' }: ModalP
       <div
         role="dialog"
         aria-modal="true"
-        className={`w-full ${maxWidth} bg-card border border-border-strong rounded-xl flex flex-col max-h-[90vh]`}
+        className={`w-full ${maxWidth} bg-card border border-border-strong rounded-xl flex flex-col max-h-[92dvh] sm:max-h-[90vh]`}
         style={{
           opacity: visible ? 1 : 0,
           transform: visible ? 'translateY(0) scale(1)' : 'translateY(6px) scale(0.98)',
@@ -92,8 +92,9 @@ export function Modal({ open, onClose, children, maxWidth = 'max-w-lg' }: ModalP
 }
 
 // Slides in from the right edge of the nearest positioned ancestor (the calendar
-// body) — intentionally not a portal, it belongs to that area.
-export function SidePanel({ open, onClose, children, width = 'w-80' }: SidePanelProps) {
+// body) — intentionally not a portal, it belongs to that area. On phones it
+// covers most of the width but leaves a strip on the left to tap to close.
+export function SidePanel({ open, onClose, children, width = 'w-[85%] max-w-sm sm:w-80' }: SidePanelProps) {
   useEscapeKey(open, onClose)
   const { mounted, visible } = useDelayedUnmount(open, 200)
 

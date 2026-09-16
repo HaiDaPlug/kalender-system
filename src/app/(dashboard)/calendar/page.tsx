@@ -36,7 +36,7 @@ export default async function CalendarPage() {
   ])
 
   return (
-    <div className="-m-6 flex flex-col flex-1 min-h-0">
+    <div className="-m-2 md:-m-6 flex flex-col flex-1 min-h-0">
       {/* CalendarView reads ?new=1 via useSearchParams, which needs a Suspense boundary. */}
       <Suspense fallback={null}>
         <CalendarView

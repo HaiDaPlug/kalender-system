@@ -6,6 +6,7 @@ import type { Booking } from '@/types'
 import {
   STATUS_CONFIG,
   WEEK_DAYS_SE,
+  WEEK_DAYS_SE_SHORT,
   isSameDay,
   isWeekend,
   formatTime,
@@ -22,6 +23,7 @@ interface Props {
 }
 
 const MAX_CHIPS = 3
+const MAX_DOTS = 6
 
 function getMonthDays(current: Date): Date[] {
   const year = current.getFullYear()
@@ -55,10 +57,13 @@ export function MonthView({ current, bookings, onSelectBooking, onSelectDay }: P
 
   return (
     <div className="flex flex-col flex-1 min-h-0">
-      {/* Day headers */}
+      {/* Day headers — one letter on phones, full names on desktop */}
       <div className="grid grid-cols-7 border-b border-border shrink-0">
         {WEEK_DAYS_SE.map((d, i) => (
-          <div key={d} className={cn('py-2 text-center label-caps', i >= 5 && 'opacity-70')}>{d}</div>
+          <div key={d} className={cn('py-2 text-center label-caps', i >= 5 && 'opacity-70')}>
+            <span className="md:hidden">{WEEK_DAYS_SE_SHORT[i]}</span>
+            <span className="hidden md:inline">{d}</span>
+          </div>
         ))}
       </div>
 
@@ -75,7 +80,7 @@ export function MonthView({ current, bookings, onSelectBooking, onSelectDay }: P
               key={day.toISOString()}
               onClick={() => onSelectDay(day)}
               className={cn(
-                'relative border-b border-r border-border p-1.5 overflow-hidden flex flex-col gap-0.5 cursor-pointer transition-colors',
+                'relative border-b border-r border-border p-1 md:p-1.5 overflow-hidden flex flex-col gap-0.5 cursor-pointer transition-colors',
                 !isCurrentMonth && 'opacity-35',
                 isWeekend(day) && 'bg-white/[0.015]',
                 isToday ? 'bg-primary/6' : 'hover:bg-secondary/40'
@@ -89,29 +94,45 @@ export function MonthView({ current, bookings, onSelectBooking, onSelectDay }: P
                   {day.getDate()}
                 </span>
                 {dayBookings.length > 0 && (
-                  <span className="text-[10px] text-muted-foreground tabular">{dayBookings.length}</span>
+                  <span className="hidden md:inline text-[10px] text-muted-foreground tabular">{dayBookings.length}</span>
                 )}
               </div>
 
-              {dayBookings.slice(0, MAX_CHIPS).map(b => {
-                const cfg = STATUS_CONFIG[b.status]
-                return (
+              {/* Phones: colored dots — text rows are unreadable in 7 columns; tapping the day opens the day view */}
+              <div className="flex flex-wrap gap-1 md:hidden">
+                {dayBookings.slice(0, MAX_DOTS).map(b => (
                   <div
                     key={b.id}
-                    onClick={e => { e.stopPropagation(); onSelectBooking(b) }}
-                    className="cal-chip"
-                    style={{ '--c': cfg.color } as CSSProperties}
-                    title={`${b.customer?.full_name} · ${b.service_type}`}
-                  >
-                    <span className="tabular shrink-0" style={{ color: cfg.color }}>{formatTime(b.scheduled_at)}</span>
-                    <span className="truncate font-medium">{b.customer?.full_name ?? b.service_type}</span>
-                  </div>
-                )
-              })}
+                    className="h-1.5 w-1.5 rounded-full shrink-0"
+                    style={{ background: STATUS_CONFIG[b.status].color }}
+                  />
+                ))}
+                {dayBookings.length > MAX_DOTS && (
+                  <span className="text-[0.55rem] leading-none text-muted-foreground">+{dayBookings.length - MAX_DOTS}</span>
+                )}
+              </div>
 
-              {overflow > 0 && (
-                <span className="label-caps pl-1 mt-0.5">+{overflow} till</span>
-              )}
+              {/* Desktop: readable chips with time and customer */}
+              <div className="hidden md:flex md:flex-col md:gap-0.5 min-h-0">
+                {dayBookings.slice(0, MAX_CHIPS).map(b => {
+                  const cfg = STATUS_CONFIG[b.status]
+                  return (
+                    <div
+                      key={b.id}
+                      onClick={e => { e.stopPropagation(); onSelectBooking(b) }}
+                      className="cal-chip"
+                      style={{ '--c': cfg.color } as CSSProperties}
+                      title={`${b.customer?.full_name} · ${b.service_type}`}
+                    >
+                      <span className="tabular shrink-0" style={{ color: cfg.color }}>{formatTime(b.scheduled_at)}</span>
+                      <span className="truncate font-medium">{b.customer?.full_name ?? b.service_type}</span>
+                    </div>
+                  )
+                })}
+                {overflow > 0 && (
+                  <span className="label-caps pl-1 mt-0.5">+{overflow} till</span>
+                )}
+              </div>
             </div>
           )
         })}
