@@ -1,57 +1,64 @@
 import { NextRequest, NextResponse } from 'next/server'
-import { createRawClient } from '@/lib/supabase/server-raw'
+import { requireApiUser, isUserRole } from '@/lib/auth/session'
 import { createServiceClient } from '@/lib/supabase/service'
+import { jsonError, readJsonObject } from '@/lib/api'
 
-// PATCH /api/workers/[id] — update role or active status (admin only)
-export async function PATCH(
-  request: NextRequest,
-  { params }: { params: Promise<{ id: string }> }
-) {
+// PATCH /api/workers/[id] { role?, is_active? } — admin only.
+// Guards: an admin cannot edit their own account here, and the last active
+// administrator can never be demoted or deactivated (that would lock everyone out).
+export async function PATCH(request: NextRequest, { params }: { params: Promise<{ id: string }> }) {
+  const auth = await requireApiUser(['admin'])
+  if (!auth.ok) return auth.response
+  const { profile } = auth
   const { id } = await params
-  const sessionClient = await createRawClient()
-  const { data: { user } } = await sessionClient.auth.getUser()
 
-  const isDev = process.env.NODE_ENV === 'development'
-  if (!user && !isDev) {
-    return NextResponse.json({ error: 'Unauthorized' }, { status: 401 })
-  }
+  if (id === profile.id) return jsonError('Du kan inte ändra ditt eget konto härifrån', 403)
 
-  // Only admins can change roles or deactivate employees
-  if (user) {
-    // eslint-disable-next-line @typescript-eslint/no-explicit-any
-    const { data: actor } = await (sessionClient as any)
+  const body = await readJsonObject(request)
+  if (!body) return jsonError('Ogiltig JSON', 400)
+
+  const { role, is_active } = body
+  if (role !== undefined && !isUserRole(role))              return jsonError('Ogiltig roll', 400)
+  if (is_active !== undefined && typeof is_active !== 'boolean') return jsonError('is_active måste vara true/false', 400)
+  if (role === undefined && is_active === undefined)        return jsonError('Inga fält att uppdatera', 400)
+
+  const service = createServiceClient()
+
+  const { data: target, error: targetErr } = await service
+    .from('profiles')
+    .select('id, role, is_active')
+    .eq('id', id)
+    .maybeSingle()
+
+  if (targetErr) return jsonError(targetErr.message, 500)
+  if (!target)   return jsonError('Anställd hittades inte', 404)
+
+  const losesAdmin = target.role === 'admin' && target.is_active
+    && ((role !== undefined && role !== 'admin') || is_active === false)
+
+  if (losesAdmin) {
+    const { count } = await service
       .from('profiles')
-      .select('role')
-      .eq('id', user.id)
-      .single() as { data: { role: string } | null }
-    if (actor?.role !== 'admin') {
-      return NextResponse.json({ error: 'Forbidden' }, { status: 403 })
-    }
-  }
-
-  const body = await request.json() as { role?: string; is_active?: boolean }
-  const allowed = ['worker', 'manager', 'admin']
-
-  if (body.role !== undefined && !allowed.includes(body.role)) {
-    return NextResponse.json({ error: 'Invalid role' }, { status: 400 })
+      .select('id', { count: 'exact', head: true })
+      .eq('role', 'admin')
+      .eq('is_active', true)
+    if ((count ?? 0) <= 1) return jsonError('Det måste finnas minst en aktiv administratör', 409)
   }
 
   const patch: { role?: string; is_active?: boolean; updated_at: string } = {
     updated_at: new Date().toISOString(),
   }
-  if (body.role !== undefined) patch.role = body.role
-  if (body.is_active !== undefined) patch.is_active = body.is_active
+  if (role !== undefined)      patch.role = role
+  if (is_active !== undefined) patch.is_active = is_active
 
-  // Use service client so RLS is bypassed — works in both dev (no user) and prod
-  // eslint-disable-next-line @typescript-eslint/no-explicit-any
-  const { data, error } = await (createServiceClient() as any)
+  const { data, error } = await service
     .from('profiles')
     .update(patch)
     .eq('id', id)
     .select()
     .single()
 
-  if (error) return NextResponse.json({ error: error.message }, { status: 500 })
+  if (error) return jsonError(error.message, 500)
 
   return NextResponse.json(data)
 }

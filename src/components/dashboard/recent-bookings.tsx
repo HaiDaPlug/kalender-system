@@ -1,61 +1,56 @@
-import type { Booking } from '@/types'
-import { format } from 'date-fns'
+import Link from 'next/link'
+import { Inbox } from 'lucide-react'
+import { formatDistanceToNow } from 'date-fns'
 import { sv } from 'date-fns/locale'
+import type { Booking } from '@/types'
+import { BUSINESS_TZ } from '@/lib/time'
+import { StatusBadge } from '@/components/ui/status-badge'
 
-const STATUS_CONFIG: Record<string, { label: string; className: string }> = {
-  pending:     { label: 'Väntande',  className: 'text-status-pending bg-status-pending/10' },
-  confirmed:   { label: 'Bekräftad', className: 'text-status-confirmed bg-status-confirmed/10' },
-  in_progress: { label: 'Pågående',  className: 'text-status-in-progress bg-status-in-progress/10' },
-  completed:   { label: 'Klar',      className: 'text-status-completed bg-status-completed/10' },
-  cancelled:   { label: 'Avbokad',   className: 'text-status-cancelled bg-status-cancelled/10' },
+function whenLabel(iso: string): string {
+  return new Date(iso).toLocaleString('sv-SE', {
+    day: 'numeric', month: 'short', hour: '2-digit', minute: '2-digit', timeZone: BUSINESS_TZ,
+  })
 }
 
 export function RecentBookings({ bookings }: { bookings: Booking[] }) {
   return (
-    <div className="rounded border border-border bg-card animate-fade-up" style={{ animationDelay: '180ms' }}>
+    <div className="card overflow-hidden animate-fade-up" style={{ animationDelay: '180ms' }}>
       <div className="px-5 py-3.5 border-b border-border flex items-center justify-between">
-        <span className="label-caps">Senaste bokningar</span>
-        <span className="label-caps">{bookings.length} poster</span>
+        <span className="text-sm font-semibold">Senast inlagda</span>
+        <span className="label-caps">{bookings.length} st</span>
       </div>
 
       {bookings.length === 0 ? (
-        <div className="px-5 py-12 text-center">
-          <p className="text-sm text-muted-foreground">Inga bokningar ännu</p>
+        <div className="empty py-10">
+          <Inbox />
+          <p className="empty-title">Inga bokningar ännu</p>
         </div>
       ) : (
-        <ul>
-          {bookings.map((booking, i) => {
-            const cfg = STATUS_CONFIG[booking.status] ?? STATUS_CONFIG.pending
-            return (
-              <li
-                key={booking.id}
-                className="px-5 py-3 flex items-center justify-between gap-4 border-b border-border last:border-0 hover:bg-secondary/40 transition-colors cursor-default"
+        <ul className="divide-y divide-border">
+          {bookings.map(booking => (
+            <li key={booking.id}>
+              <Link
+                href={`/bookings/${booking.id}`}
+                className="px-5 py-3 flex items-center justify-between gap-3 hover:bg-secondary/50 transition-colors"
               >
-                <div className="flex items-center gap-3 min-w-0">
-                  <span className="label-caps w-5 text-right shrink-0 tabular opacity-40">{i + 1}</span>
-                  <div className="min-w-0">
-                    <p className="text-sm font-medium text-foreground truncate">
-                      {booking.customer?.full_name ?? '—'}
-                    </p>
-                    <p className="text-xs text-muted-foreground truncate">
-                      {booking.car?.make} {booking.car?.model} · {booking.service_type}
-                    </p>
-                  </div>
+                <div className="min-w-0">
+                  <p className="text-sm font-medium text-foreground truncate">
+                    {booking.customer?.full_name ?? '—'}
+                  </p>
+                  <p className="text-xs text-muted-foreground truncate">
+                    {whenLabel(booking.scheduled_at)}
+                    <span className="mx-1.5 opacity-50">·</span>
+                    {booking.service_type}
+                  </p>
+                  <p className="text-[11px] text-muted-foreground/70 truncate mt-0.5">
+                    Inlagd {formatDistanceToNow(new Date(booking.created_at), { locale: sv, addSuffix: true })}
+                    {booking.creator && ` av ${booking.creator.full_name}`}
+                  </p>
                 </div>
-
-                <div className="flex items-center gap-3 shrink-0">
-                  <span className="text-xs text-muted-foreground tabular">
-                    {format(new Date(booking.scheduled_at), 'dd MMM HH:mm', { locale: sv })}
-                  </span>
-                  <span
-                    className={`text-xs px-2 py-0.5 rounded font-medium ${cfg.className}`}
-                  >
-                    {cfg.label}
-                  </span>
-                </div>
-              </li>
-            )
-          })}
+                <StatusBadge status={booking.status} size="sm" className="shrink-0" />
+              </Link>
+            </li>
+          ))}
         </ul>
       )}
     </div>

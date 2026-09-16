@@ -4,6 +4,7 @@ import { useState, useEffect, useCallback } from 'react'
 import { Loader2 } from 'lucide-react'
 import { toast } from 'sonner'
 import { JobsBoard } from '@/components/jobs/jobs-board'
+import { PageHeader } from '@/components/ui/page-header'
 import type { CleaningJob } from '@/types'
 
 export default function JobsPage() {
@@ -15,19 +16,22 @@ export default function JobsPage() {
     if (res.ok) {
       setJobs(await res.json())
     } else {
-      toast.error('Kunde inte hämta jobb', { description: `${res.status} ${res.statusText}` })
+      const d = await res.json().catch(() => ({}))
+      toast.error('Kunde inte hämta jobb', { description: d.error ?? `${res.status} ${res.statusText}` })
     }
     setLoading(false)
   }, [])
 
   useEffect(() => { (async () => { await fetchJobs() })() }, [fetchJobs])
 
+  const active = jobs.filter(j => j.status === 'in_progress' || j.status === 'needs_review').length
+
   return (
     <div className="space-y-5">
-      <div>
-        <h1 className="text-xl font-semibold">Tvättjobb</h1>
-        <p className="text-muted-foreground text-sm">Följ jobbstatus, bilder och anteckningar</p>
-      </div>
+      <PageHeader
+        title="Tvättjobb"
+        subtitle={loading ? 'Laddar…' : `${jobs.length} jobb · ${active} pågående`}
+      />
       {loading ? (
         <div className="flex items-center gap-2 text-muted-foreground py-8">
           <Loader2 className="h-4 w-4 animate-spin" />

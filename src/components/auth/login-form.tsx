@@ -3,6 +3,7 @@
 import { useState } from 'react'
 import { useRouter, useSearchParams } from 'next/navigation'
 import { toast } from 'sonner'
+import { ArrowRight, Loader2 } from 'lucide-react'
 import { createClient } from '@/lib/supabase/client'
 import { rememberAccount } from '@/lib/utils/known-accounts'
 
@@ -21,7 +22,7 @@ export function LoginForm() {
     setLoading(true)
     setError(null)
 
-    const { error } = await supabase.auth.signInWithPassword({ email, password })
+    const { error } = await supabase.auth.signInWithPassword({ email: email.trim(), password })
     if (error) {
       setError('Fel e-post eller lösenord')
       toast.error('Inloggning misslyckades', { description: error.message })
@@ -35,14 +36,13 @@ export function LoginForm() {
         .from('profiles')
         .select('full_name, role')
         .eq('id', user.id)
-        .single()
-      const p = profile as { full_name: string; role: string } | null
-      rememberAccount({ email, fullName: p?.full_name ?? email, role: p?.role ?? 'worker' })
+        .maybeSingle()
+      rememberAccount({ email: email.trim(), fullName: profile?.full_name ?? email, role: profile?.role ?? 'worker' })
     }
 
     setEntering(true)
     router.refresh()
-    setTimeout(() => router.push('/dashboard'), 700)
+    setTimeout(() => router.push('/dashboard'), 600)
   }
 
   if (entering) {
@@ -58,46 +58,54 @@ export function LoginForm() {
   }
 
   return (
-    <form onSubmit={handleSubmit} className="space-y-5 bg-card border border-border rounded p-7">
-      <div className="text-center space-y-1 mb-1">
-        <p className="text-sm font-medium text-foreground">Logga in på arbetsportalen</p>
-      </div>
-      {error && (
-        <div className="rounded bg-destructive/10 text-destructive text-sm px-3 py-2">
-          {error}
+    <div className="animate-scale-in">
+      {/* Brand */}
+      <div className="flex flex-col items-center gap-3 mb-6">
+        <div className="brand-mark brand-mark-lg" aria-hidden>K</div>
+        <div className="text-center">
+          <p className="text-lg font-semibold tracking-tight">KOM-fort Bilvård</p>
+          <p className="text-sm text-muted-foreground mt-0.5">Logga in på arbetsportalen</p>
         </div>
-      )}
-      <div className="space-y-1.5">
-        <label className="label-caps" htmlFor="email">E-post</label>
-        <input
-          id="email"
-          type="email"
-          value={email}
-          onChange={e => setEmail(e.target.value)}
-          required
-          className="w-full rounded border border-border bg-secondary px-3 py-2 text-sm text-foreground focus:outline-none focus:ring-1 focus:ring-primary placeholder:text-muted-foreground"
-          placeholder="din@epost.se"
-        />
       </div>
-      <div className="space-y-1.5">
-        <label className="label-caps" htmlFor="password">Lösenord</label>
-        <input
-          id="password"
-          type="password"
-          value={password}
-          onChange={e => setPassword(e.target.value)}
-          required
-          className="w-full rounded border border-border bg-secondary px-3 py-2 text-sm text-foreground focus:outline-none focus:ring-1 focus:ring-primary placeholder:text-muted-foreground"
-          placeholder="••••••••"
-        />
-      </div>
-      <button
-        type="submit"
-        disabled={loading}
-        className="w-full rounded bg-primary text-primary-foreground py-2 text-sm font-semibold hover:bg-primary/90 disabled:opacity-50 transition-colors"
-      >
-        {loading ? 'Loggar in…' : 'Logga in'}
-      </button>
-    </form>
+
+      <form onSubmit={handleSubmit} className="card p-6 space-y-4">
+        {error && (
+          <div className="rounded-md bg-destructive/12 border border-destructive/30 text-destructive text-sm px-3 py-2">
+            {error}
+          </div>
+        )}
+        <div className="space-y-1.5">
+          <label className="label-caps" htmlFor="email">E-post</label>
+          <input
+            id="email"
+            type="email"
+            autoComplete="email"
+            value={email}
+            onChange={e => setEmail(e.target.value)}
+            required
+            className="field"
+            placeholder="din@epost.se"
+          />
+        </div>
+        <div className="space-y-1.5">
+          <label className="label-caps" htmlFor="password">Lösenord</label>
+          <input
+            id="password"
+            type="password"
+            autoComplete="current-password"
+            value={password}
+            onChange={e => setPassword(e.target.value)}
+            required
+            className="field"
+            placeholder="••••••••"
+          />
+        </div>
+        <button type="submit" disabled={loading} className="btn btn-primary btn-lg btn-block mt-2">
+          {loading ? <Loader2 className="animate-spin" /> : null}
+          {loading ? 'Loggar in…' : 'Logga in'}
+          {!loading && <ArrowRight />}
+        </button>
+      </form>
+    </div>
   )
 }

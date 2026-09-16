@@ -1,29 +1,24 @@
 import { redirect } from 'next/navigation'
-import { createClient } from '@/lib/supabase/server'
+import { getSession } from '@/lib/auth/session'
 import { Sidebar } from '@/components/layout/sidebar'
 import { TopBar } from '@/components/layout/top-bar'
-import type { Profile } from '@/types'
+import { AccountBlocked } from '@/components/auth/account-blocked'
 
 export default async function DashboardLayout({ children }: { children: React.ReactNode }) {
-  const supabase = await createClient()
-  const { data: { user } } = await supabase.auth.getUser()
-  if (!user) redirect('/login')
+  const session = await getSession()
 
-  const { data } = await supabase
-    .from('profiles')
-    .select('*')
-    .eq('id', user.id)
-    .single()
-  if (!data) redirect('/login')
-
-  const profile = data as Profile
+  if (!session.ok) {
+    if (session.reason === 'unauthenticated') redirect('/login')
+    // Signed in but not allowed in (deactivated / missing profile): explain instead of looping.
+    return <AccountBlocked reason={session.reason} />
+  }
 
   return (
     <div className="flex h-screen overflow-hidden">
-      <Sidebar profile={profile} />
+      <Sidebar profile={session.profile} />
       <div className="flex flex-col flex-1 overflow-hidden min-w-0">
         <TopBar />
-        <main className="flex-1 overflow-y-auto p-2 md:p-6 bg-muted/20 flex flex-col min-h-0">
+        <main className="main-surface flex-1 overflow-y-auto p-6 flex flex-col min-h-0">
           <div className="page-enter flex flex-col flex-1 min-h-0">
             {children}
           </div>

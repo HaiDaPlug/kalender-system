@@ -1,31 +1,74 @@
-import type { Booking } from '@/types'
+import type { Booking, BookingStatus } from '@/types'
+import { BOOKING_STATUS } from '@/lib/status'
 
 export type CalendarView = 'dag' | 'vecka' | 'månad'
 
-// Colors reference the CSS custom properties in globals.css (--status-*) so the
-// calendar stays in sync with the rest of the app's theme. bg/border use
-// color-mix since these are consumed as inline styles (dynamic per-booking
-// position), which Tailwind's static class scanner can't reach.
-export const STATUS_CONFIG = {
-  pending:     { label: 'Väntande',  color: 'var(--status-pending)',     bg: 'color-mix(in srgb, var(--status-pending) 13%, transparent)',     border: 'color-mix(in srgb, var(--status-pending) 38%, transparent)',     chipBg: 'color-mix(in srgb, var(--status-pending) 15%, transparent)' },
-  confirmed:   { label: 'Bekräftad', color: 'var(--status-confirmed)',   bg: 'color-mix(in srgb, var(--status-confirmed) 13%, transparent)',   border: 'color-mix(in srgb, var(--status-confirmed) 38%, transparent)',   chipBg: 'color-mix(in srgb, var(--status-confirmed) 15%, transparent)' },
-  in_progress: { label: 'Pågående',  color: 'var(--status-in-progress)', bg: 'color-mix(in srgb, var(--status-in-progress) 13%, transparent)', border: 'color-mix(in srgb, var(--status-in-progress) 38%, transparent)', chipBg: 'color-mix(in srgb, var(--status-in-progress) 15%, transparent)' },
-  completed:   { label: 'Klar',      color: 'var(--status-completed)',   bg: 'color-mix(in srgb, var(--status-completed) 13%, transparent)',   border: 'color-mix(in srgb, var(--status-completed) 38%, transparent)',   chipBg: 'color-mix(in srgb, var(--status-completed) 15%, transparent)' },
-  cancelled:   { label: 'Avbokad',   color: 'var(--status-cancelled)',   bg: 'color-mix(in srgb, var(--status-cancelled) 13%, transparent)',   border: 'color-mix(in srgb, var(--status-cancelled) 38%, transparent)',   chipBg: 'color-mix(in srgb, var(--status-cancelled) 15%, transparent)' },
-} as const
+export interface CalendarStatusStyle {
+  label: string
+  color: string
+  bg: string
+  border: string
+  chipBg: string
+}
+
+// Colors reference the CSS custom properties in globals.css (--status-*) via the
+// shared status module so the calendar stays in sync with the rest of the app.
+// bg/border use color-mix since these are consumed as inline styles (dynamic
+// per-booking position), which Tailwind's static class scanner can't reach.
+function statusStyle(status: BookingStatus): CalendarStatusStyle {
+  const { label, color } = BOOKING_STATUS[status]
+  return {
+    label,
+    color,
+    bg:     `color-mix(in srgb, ${color} 16%, transparent)`,
+    border: `color-mix(in srgb, ${color} 42%, transparent)`,
+    chipBg: `color-mix(in srgb, ${color} 18%, transparent)`,
+  }
+}
+
+export const STATUS_CONFIG: Record<BookingStatus, CalendarStatusStyle> = {
+  pending:     statusStyle('pending'),
+  confirmed:   statusStyle('confirmed'),
+  in_progress: statusStyle('in_progress'),
+  completed:   statusStyle('completed'),
+  cancelled:   statusStyle('cancelled'),
+}
 
 export const HOURS = Array.from({ length: 24 }, (_, i) => i)
 export const HOUR_PX = 60
 export const TIME_COL_PX = 80
-// Minsta bredd på en dagkolumn i veckovyn. På en telefon får inte 7 kolumner
-// plats — då scrollar veckan i sidled istället för att klippa bort lör/sön.
-// 88px ger ~4 dagar på en 390px-skärm och räcker för "08:00 Anders".
-export const MIN_DAY_COL_PX = 88
-// Tidsaxeln krymps på mobil; 80px tar för mycket av en smal skärm.
-export const TIME_COL_PX_MOBILE = 48
+// Hours outside this window are shaded in the day/week grids.
+export const WORK_START_HOUR = 7
+export const WORK_END_HOUR = 19
+
+// CSS custom properties consumed by .cal-grid / .cal-column in globals.css.
+export const CAL_GRID_VARS = {
+  '--hour-px': `${HOUR_PX}px`,
+  '--work-start': String(WORK_START_HOUR),
+  '--work-end': String(WORK_END_HOUR),
+} as const
+
+export function dateKey(d: Date): string {
+  return `${d.getFullYear()}-${d.getMonth()}-${d.getDate()}`
+}
+
+export function isWeekend(d: Date): boolean {
+  const day = d.getDay()
+  return day === 0 || day === 6
+}
+
+// Groups bookings by the local calendar day they start on (for the month view).
+export function groupBookingsByDay(bookings: Booking[]): Map<string, Booking[]> {
+  const map = new Map<string, Booking[]>()
+  for (const b of bookings) {
+    const key = dateKey(new Date(b.scheduled_at))
+    const list = map.get(key)
+    if (list) list.push(b)
+    else map.set(key, [b])
+  }
+  return map
+}
 export const WEEK_DAYS_SE = ['Mån', 'Tis', 'Ons', 'Tor', 'Fre', 'Lör', 'Sön']
-// Enbokstavsvarianter för trånga mobilrubriker (månadsvyn).
-export const WEEK_DAYS_SE_SHORT = ['M', 'T', 'O', 'T', 'F', 'L', 'S']
 export const MONTHS_SE = [
   'Januari', 'Februari', 'Mars', 'April', 'Maj', 'Juni',
   'Juli', 'Augusti', 'September', 'Oktober', 'November', 'December',

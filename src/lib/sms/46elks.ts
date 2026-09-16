@@ -1,5 +1,7 @@
 import 'server-only'
 
+import { formatSmsDate, formatSmsTime, interpolateTemplate } from '@/lib/sms/format'
+
 const API_USERNAME = process.env.FORTYSIX_ELKS_API_USERNAME
 const API_PASSWORD = process.env.FORTYSIX_ELKS_API_PASSWORD
 const FROM         = process.env.FORTYSIX_ELKS_FROM ?? 'RenGor'
@@ -18,8 +20,13 @@ export interface BookingSmsData {
   scheduledAt:  string
 }
 
-function normalisePhone(raw: string): string | null {
-  const s = raw.replace(/[\s-]/g, '')
+/*
+  Normalises a Swedish-style phone number to E.164 (+46701234567).
+  Accepts "070-123 45 67", "0046 70 ...", "+46 70 ..." etc. Returns null when the
+  result doesn't look like a valid international number.
+*/
+export function normalisePhone(raw: string): string | null {
+  const s = raw.replace(/[\s\-()]/g, '')
   let normalised: string
   if (s.startsWith('+'))      normalised = s
   else if (s.startsWith('00')) normalised = `+${s.slice(2)}`
@@ -27,17 +34,6 @@ function normalisePhone(raw: string): string | null {
   else                         normalised = s
 
   return /^\+[1-9]\d{7,14}$/.test(normalised) ? normalised : null
-}
-
-function interpolateTemplate(
-  template: string,
-  vars: { name: string; date: string; time: string; service: string },
-): string {
-  return template
-    .replace(/{name}/g,    vars.name)
-    .replace(/{date}/g,    vars.date)
-    .replace(/{time}/g,    vars.time)
-    .replace(/{service}/g, vars.service)
 }
 
 export async function sendRawSms(to: string, message: string): Promise<Omit<SmsSendResult, 'message'> & { normalisedTo: string | null }> {
@@ -94,14 +90,11 @@ export async function sendBookingConfirmedSms(
   }
 
   const dt = new Date(data.scheduledAt)
-  const date = dt.toLocaleDateString('sv-SE', { weekday: 'long', day: 'numeric', month: 'long', timeZone: 'Europe/Stockholm' })
-  const time = dt.toLocaleTimeString('sv-SE', { hour: '2-digit', minute: '2-digit', timeZone: 'Europe/Stockholm' })
-
   const message = interpolateTemplate(templateBody, {
     name:    data.customerName,
     service: data.serviceType,
-    date,
-    time,
+    date:    formatSmsDate(dt),
+    time:    formatSmsTime(dt),
   })
 
   const result = await sendSms(to, message)

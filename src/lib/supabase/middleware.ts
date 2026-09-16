@@ -2,7 +2,42 @@ import { createServerClient } from '@supabase/ssr'
 import { NextResponse, type NextRequest } from 'next/server'
 import type { Database } from '@/types/database'
 
+/*
+  Runs in the proxy for every non-static request.
+
+  Pages:   verify the session (network call to Supabase Auth) and redirect
+           signed-out visitors to /login. This is also where an expired access
+           token gets refreshed and the new cookies written.
+  API:     every route handler verifies the caller itself via requireApiUser()
+           (src/lib/auth/session.ts), which also refreshes tokens. Doing the same
+           network lookup here as well doubled the auth cost of every API call,
+           so for /api/* we only fast-fail requests that carry no auth cookie at
+           all and otherwise let the handler do the real check.
+  Webhooks: exempt — they authenticate with their own signature.
+*/
+
+function hasSupabaseAuthCookie(request: NextRequest): boolean {
+  return request.cookies.getAll().some(c => c.name.startsWith('sb-') && c.name.includes('-auth-token'))
+}
+
 export async function updateSession(request: NextRequest) {
+  const { pathname } = request.nextUrl
+
+  const isAuthRoute = pathname.startsWith('/login') || pathname.startsWith('/register')
+  const isWebhookRoute = pathname.startsWith('/api/webhooks')
+  const isApiRoute = pathname.startsWith('/api')
+
+  if (isWebhookRoute) {
+    return NextResponse.next({ request })
+  }
+
+  if (isApiRoute) {
+    if (!hasSupabaseAuthCookie(request)) {
+      return NextResponse.json({ error: 'unauthenticated' }, { status: 401 })
+    }
+    return NextResponse.next({ request })
+  }
+
   let supabaseResponse = NextResponse.next({ request })
 
   const supabase = createServerClient<Database>(
@@ -28,20 +63,12 @@ export async function updateSession(request: NextRequest) {
     data: { user },
   } = await supabase.auth.getUser()
 
-  const { pathname } = request.nextUrl
-
-  const isAuthRoute = pathname.startsWith('/login') || pathname.startsWith('/register')
-  // Webhooks are called by external services with no Supabase session — they
-  // authenticate via their own signature verification instead (see route.ts).
-  const isWebhookRoute = pathname.startsWith('/api/webhooks')
-  const isPublicRoute = pathname === '/' || isAuthRoute || isWebhookRoute
+  const isPublicRoute = pathname === '/' || isAuthRoute
 
   if (!user && !isPublicRoute) {
-    if (pathname.startsWith('/api')) {
-      return NextResponse.json({ error: 'unauthenticated' }, { status: 401 })
-    }
     const url = request.nextUrl.clone()
     url.pathname = '/login'
+    url.search = ''
     return NextResponse.redirect(url)
   }
 
@@ -52,6 +79,7 @@ export async function updateSession(request: NextRequest) {
   if (user && isAuthRoute && !isAccountSwitch) {
     const url = request.nextUrl.clone()
     url.pathname = '/dashboard'
+    url.search = ''
     return NextResponse.redirect(url)
   }
 

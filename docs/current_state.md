@@ -1,5 +1,5 @@
 # KOM-fort Bilvård — Portal: Current State
-_Last updated: 2026-07-28 (staff page role-dropdown overlap fix)_
+_Last updated: 2026-09-16 (robustness pass: shared auth helper, API hardening, real dashboard data, design system)_
 
 ---
 
@@ -18,7 +18,7 @@ Built specifically for Goran's and the workers' daily workflow, not a generic ca
 | Layer | Choice |
 |---|---|
 | Framework | Next.js 16.2.7 / App Router, TypeScript, `src/` structure |
-| Styling | Tailwind CSS v4 + shadcn/ui, black-and-gold dark theme (`#131211` base, `#F5C842` accent) |
+| Styling | Tailwind CSS v4 + shadcn/ui, black-and-gold dark theme (`#121110` base, `#F5C842` accent) + shared component classes in `globals.css` (see "Design system" below) |
 | Database / Auth | Supabase (Postgres + Auth) — Hai's project: `vsnbaylcgcksabwradgu` |
 | Image storage | Supabase Storage (buckets: `car-before-images`, `car-after-images`) |
 | GHL integration | HighLevel API v2 |
@@ -36,49 +36,65 @@ src/
   proxy.ts                             # Auth proxy — ACTIVE, calls updateSession on every request except static assets
   types/index.ts                       # All types: Booking, Shift, CleaningJob, ImageRecord, etc.
   lib/
+    auth/session.ts                    # ✅ getSession() / requireApiUser(roles) — the ONE way server code resolves the caller (user + profile + role + is_active)
+    api.ts                             # ✅ Route-handler helpers: jsonError, readJsonObject (safe body parse), pickAllowed (allow-list), validators
+    status.ts                          # ✅ Single source of status labels + colors (booking / job / shift) used by every badge, legend and filter
+    time.ts                            # ✅ Europe/Stockholm helpers: businessDayRange() for "today" queries on a UTC server
+    hooks/use-local-flag.ts            # ✅ localStorage boolean via useSyncExternalStore (sidebar collapsed state)
     supabase/
       client.ts                        # Browser client (typed)
       server.ts                        # Server client for reads
-      server-raw.ts                    # Untyped client for mutation routes
-      service.ts                       # Service-role, bypasses RLS (webhooks only)
+      server-raw.ts                    # Untyped client (no longer used by routes; kept for ad-hoc scripts)
+      service.ts                       # Service-role, bypasses RLS — typed; reads SUPABASE_SECRET_KEY (falls back to SUPABASE_SERVICE_ROLE_KEY)
       middleware.ts                    # updateSession — redirects unauthenticated pages to /login, 401 JSON on /api/*, exempts /api/webhooks/*
+    sms/
+      46elks.ts                        # Send via 46elks; exports normalisePhone (E.164)
+      confirmation.ts                  # ✅ sendConfirmationSms — the shared template → sms_log → 46elks → flag flow used by create + approve
+      sms-parts.ts                     # GSM-7 / Unicode part counter (client-safe)
+    email/resend.ts                    # Resend emails — HTML-escaped, 10s timeout, never throws
     gohighlevel/
       client.ts                        # GHL API v2: calendar, contacts, SMS
       webhooks.ts                      # Payload parsers for appointment + contact
   app/
     (auth)/login/                      # Login page (Swedish UI)
     (dashboard)/
-      layout.tsx                       # Reads profile from session; redirects to /login if no user or no profile row
-      dashboard/page.tsx               # Overview: stats + pending shifts banner + recent bookings
+      layout.tsx                       # getSession(): unauthenticated → /login; deactivated or profile-less → <AccountBlocked> screen (no redirect loop)
+      dashboard/page.tsx               # ✅ Overview with REAL data: greeting, 4 stat cards, pending banners, today's schedule, recently added
       calendar/page.tsx                # Calendar — fetches data from Supabase
       bookings/page.tsx                # Bookings list — not linked in sidebar (calendar covers this)
       bookings/[id]/page.tsx           # ✅ Booking detail page with full editing + job photo section
       customers/[id]/page.tsx          # ✅ Customer history: visits, cars, SMS, notes
-      my-shifts/page.tsx               # ✅ My shifts: add, search, view linked bookings
+      my-shifts/page.tsx               # ✅ Server shell — resolves the real session user and renders components/shifts/my-shifts-view.tsx (DEV_USER stub is gone)
       jobs/page.tsx                    # ✅ Kanban board — fetches live data from /api/jobs
       admin/job-reviews/page.tsx       # ✅ Admin before/after photo review page (Goran only)
       admin/sms-templates/page.tsx     # ✅ Admin SMS template editor — variable chips, GSM-7 part counter
-      workers/page.tsx                 # ✅ Staff management — list all employees, change roles, activate/deactivate, add new
+      workers/page.tsx                 # ✅ Staff management — list all employees, change roles, activate/deactivate, add new (own row locked)
+      bookings/page.tsx                # Flat newest-first list of the last 200 bookings (not in sidebar)
       settings/page.tsx                # Placeholder — not linked in sidebar
-    api/
-      bookings/route.ts                # GET list, POST simple
-      bookings/create/route.ts         # ✅ POST customer+car+booking+SMS in one call
-      bookings/[id]/route.ts           # GET, PATCH, DELETE single booking
-      shifts/route.ts                  # ✅ GET filter shifts, POST create shift
-      shifts/approve/route.ts          # ✅ POST approve/reject (requires admin/manager)
-      customers/[id]/route.ts          # ✅ GET full customer profile, PATCH notes
-      sms/send/route.ts                # POST manual SMS via 46elks (admin/manager only)
+    api/                               # Every route starts with requireApiUser(roles?) from lib/auth/session.ts — no dev bypasses remain
+      bookings/route.ts                # GET list (validated filters); POST low-level insert (admin/manager, allow-listed)
+      bookings/create/route.ts         # ✅ POST customer+car+booking+SMS — normalises phone, reuses customer by phone and car by plate
+      bookings/[id]/route.ts           # GET; PATCH (admin, allow-listed + validated); DELETE (admin, service client, detaches sms_logs, 404 if nothing deleted)
+      shifts/route.ts                  # ✅ GET filter shifts; POST — worker is the session user (reviewers may pass workerId), ≤24h
+      shifts/approve/route.ts          # ✅ POST approve/reject — reviewer = session user (body reviewerId ignored), only pending shifts
+      customers/[id]/route.ts          # ✅ GET full customer profile; PATCH (admin/manager, allow-listed: notes, name, email, phone, address)
+      sms/send/route.ts                # POST manual SMS via 46elks (admin/manager) — logged as 'manual', does NOT set sms_confirmation_sent
       webhooks/ghl/route.ts            # POST GHL appointment/contact sync
-      jobs/route.ts                    # ✅ GET list (supports ?booking_id=), POST create job
-      jobs/[id]/route.ts               # ✅ GET single job, PATCH status/notes
-      jobs/[id]/images/route.ts        # ✅ POST upload image to Supabase Storage
-      workers/route.ts                 # ✅ GET active/all employees; POST invites via Supabase Auth Admin API
-      workers/[id]/route.ts           # ✅ PATCH role or is_active (admin only, uses service client)
+      jobs/route.ts                    # ✅ GET list (?booking_id=); POST create job — worker = caller for staff, returns existing job (200) instead of 500
+      jobs/[id]/route.ts               # ✅ GET; PATCH — workers only their own job, cannot set completed / admin_notes
+      jobs/[id]/images/route.ts        # ✅ POST upload — image/* only, ≤15 MB, caller must own the job or be a reviewer
+      workers/route.ts                 # ✅ GET employees (RLS-scoped); POST invite (admin) — validates email, rejects duplicates
+      workers/[id]/route.ts            # ✅ PATCH role/is_active (admin) — cannot edit yourself, cannot remove the last active admin
   components/
     ui/
       modal.tsx                        # ✅ Reusable Modal + SidePanel with smooth CSS transitions
       lightbox.tsx                     # ✅ Fullscreen image lightbox with arrow + keyboard navigation
-      button.tsx
+      status-badge.tsx                 # ✅ <StatusBadge status kind="booking|job|shift" size> — pill with glowing dot, reads lib/status.ts
+      page-header.tsx                  # ✅ <PageHeader title subtitle actions leading> — one heading pattern for every page
+      button.tsx                       # shadcn Button, now a thin wrapper over the .btn classes (unused by the app today)
+    auth/account-blocked.tsx           # ✅ Full-screen "deactivated / no profile" screen with a real sign-out button
+    dashboard/today-schedule.tsx       # ✅ Today's bookings list (time, customer, car, worker, status) → /bookings/[id]
+    shifts/my-shifts-view.tsx          # ✅ Client half of /my-shifts (search, filter, list, linked bookings)
     calendar/
       calendar-view.tsx                # Full-bleed toolbar (nav, title, view dropdown, status/worker filters, "Ny bokning" at far right) + status legend footer below the grid
       day-view.tsx                     # 24h grid, 15-min snap slot clicks, live time line
@@ -88,9 +104,8 @@ src/
       calendar-utils.ts                # Layout math, time helpers, HOUR_PX / TIME_COL_PX constants
       create-booking-modal.tsx         # ✅ Modal: customer, car, service, status, worker, price
     shifts/
-      create-shift-modal.tsx           # ✅ Modal for worker to submit a shift
-      pending-shifts-banner.tsx        # ✅ Yellow banner on dashboard — Goran approves directly
-      pending-shifts-panel.tsx         # Reusable panel for pending shifts
+      create-shift-modal.tsx           # ✅ Modal for worker to submit a shift (no workerId sent — server uses the session)
+      pending-shifts-banner.tsx        # ✅ Amber banner on dashboard — approve/reject directly (pending-shifts-panel.tsx was unused and is removed)
     jobs/
       jobs-board.tsx                   # ✅ Kanban board component (4 columns by status) — cards link to /bookings/[id]
       job-photos.tsx                   # ✅ Before/after photo upload component for workers
@@ -141,7 +156,8 @@ supabase/
 7. `006_fix_profiles_policy_recursion.sql` — fixes RLS infinite recursion on profiles via security-definer helper
 8. `007_booking_worker_submit.sql` — adds `created_by`, opens booking INSERT to workers (pending status only)
 9. `008_sms_templates.sql` — creates `sms_templates` table, adds `unknown` to `sms_logs` status constraint, seeds default confirmation template
-10. **Not yet a migration file** — `alter function handle_new_user() set search_path = public;` applied directly to the live DB on 2026-07-11. See changelog for why. Should be captured as `009_fix_handle_new_user_search_path.sql` before the next fresh-DB setup.
+10. `009_fix_handle_new_user_search_path.sql` — captures the `search_path = public` fix that was applied live on 2026-07-11 (plus `on conflict do nothing` so a pre-existing profile row never breaks signup)
+11. `010_bookings_delete_and_sms_log_fk.sql` — **⚠️ NOT YET APPLIED TO THE LIVE DB (written 2026-09-16, run it in the SQL editor).** Adds the missing admin DELETE policy on `bookings`, changes `sms_logs.booking_id` to `on delete set null`, lets admin/manager insert `cleaning_jobs` for any worker, and adds `updated_at` triggers on bookings/customers/profiles. The API was written to work correctly even before this is applied (DELETE uses the service client and detaches SMS logs itself), so nothing is broken in the meantime — the migration makes the DB match the intent.
 
 **Storage buckets (create manually in Supabase dashboard, set to public):**
 - `car-before-images`
@@ -158,10 +174,12 @@ supabase/
   - Unauthenticated + `/api/*` route (excluding `/api/webhooks/*`) → `401 {"error":"unauthenticated"}` JSON, not a redirect (API callers shouldn't get an HTML page back)
   - `/api/webhooks/*` is always exempt — GHL calls this with no Supabase session at all; it authenticates via its own Ed25519 signature check instead (see GHL webhook section below)
   - Authenticated user hitting `/login` or `/register` → redirected to `/dashboard`, **except** `/login?email=...` (the sidebar account switcher's link) — that's let through so a signed-in user can actually reach the login form to sign in as a different account (see 2026-07-28 changelog)
-- `DEV_PROFILE`/`DEV_USER` stubs removed from `layout.tsx`, `dashboard/page.tsx`, and the dev service-role bypass removed from `calendar/page.tsx` — all three now require a real session + profile row, redirecting to `/login` if either is missing.
-- **Known edge case, not yet hardened:** if an authenticated Supabase user has no matching `profiles` row (e.g. the `handle_new_user` trigger fails), `layout.tsx`/`dashboard/page.tsx` redirect to `/login`, but `updateSession` bounces any authenticated user away from `/login` back to `/dashboard` — this could loop. Low risk today since the trigger reliably creates the profile row, but worth a guard if account-creation paths change.
-- **Login flow:** `login-form.tsx` no longer does an instant `router.push('/dashboard')` on success — it shows a brief "Loggar in på arbetsportalen…" spinner (`entering` state, `animate-fade-in` + `animate-spin`) for ~700ms first.
-- **Found but not yet cleaned up:** several API routes still have `NODE_ENV === 'development'` bypass branches for the unauthenticated case (`api/me`, `api/bookings/create`, `api/bookings/approve`, `api/sms-templates`, `api/workers`, `api/workers/[id]`) — these are now dead code for unauthenticated callers since `updateSession` returns 401 before the route body ever runs, regardless of `NODE_ENV`. Doesn't affect authenticated behavior (those branches only trigger on `!user`). Cleanup candidate, not done in this pass.
+- **`src/lib/auth/session.ts` is the single entry point for "who is calling" on the server (2026-09-16).** `getSession()` returns `{ user, profile, supabase }` or a typed failure (`unauthenticated` 401 / `no_profile` 403 / `inactive` 403). `requireApiUser(roles?)` wraps it for route handlers and returns a ready JSON error response. Every API route and every server page uses it — there are no more per-route copies of the `auth.getUser()` + `profiles` lookup, and **all `NODE_ENV === 'development'` bypass branches are gone.**
+- **Deactivated employees are now actually locked out.** `profiles.is_active = false` was previously only a label on `/workers`; nothing enforced it. `getSession()` treats an inactive profile as a 403, so every API call fails and the dashboard layout renders `<AccountBlocked reason="inactive">` (a full-screen explanation with a real sign-out button) instead of the app.
+- **The `/login` ⇄ `/dashboard` loop for a user with no profile row is closed** the same way: the layout renders `<AccountBlocked reason="no_profile">` instead of redirecting to `/login`.
+- **Login flow:** `login-form.tsx` shows a brief "Loggar in…" spinner (~600ms) before navigating to `/dashboard`.
+- **Role enforcement on the API (all server-side, independent of RLS):** admin-only → booking PATCH/DELETE, worker role/active changes, SMS-template PATCH, employee invites. Admin + manager → approve/reject bookings and shifts, customer PATCH, manual SMS, creating jobs/shifts on someone else's behalf. Workers → their own jobs/shifts only, cannot approve their own job (`status=completed`) or write `admin_notes`, cannot start a job on a booking assigned to someone else.
+- **Request bodies are never spread into updates anymore.** `PATCH /api/bookings/[id]` and `PATCH /api/customers/[id]` used `{ ...body }`, so any column (`created_by`, `sms_confirmation_sent`, `highlevel_appointment_id`, …) could be written. Both now allow-list columns (`pickAllowed`) and validate types. Malformed JSON returns 400 instead of an unhandled 500 (`readJsonObject`).
 
 ---
 
@@ -322,21 +340,16 @@ Workers document their work directly from the booking detail page (`/bookings/[i
 
 | Feature | Priority |
 |---|---|
-| ~~Auth enabled (proxy.ts is passthrough)~~ | ~~Done~~ — see Auth section (2026-07-15) |
-| Clean up dead `NODE_ENV === 'development'` bypass branches in API routes (see Auth section) | Low |
+| **Run migration `010_bookings_delete_and_sms_log_fk.sql` on the live DB** (and `009` if a fresh DB is ever set up) | **Next session** |
 | Storage bucket RLS policies | **Before production** |
-| SMS via 46elks — sender-ID 403 root-caused and fixed (hyphen in `FORTYSIX_ELKS_FROM`, see 2026-07-23 entry); confirm live delivery after restart | **In progress** |
-| Auto-SMS on booking create — now wired via 46elks (same path as approval) | Done |
+| Confirm the new booking/approve/shift flows in the browser as admin, manager and worker (this pass was verified by typecheck, lint, build and curl only — no authenticated browser session was available) | **Next session** |
 | Auto-SMS when car is ready | High |
-| Dashboard stats with real data (totalBookings, activeJobs, completedToday) | Medium |
-| Recent bookings on dashboard with real data | Medium |
-| Bookings list page (`/bookings`) | Removed from nav — calendar covers this use case |
-| Staff page (`/workers`) | ~~Done~~ — roles, activate/deactivate, add employee |
-| my-shifts page: replace DEV_USER with real session user | Unblocked now that auth is enabled — not yet done |
+| Calendar loads every booking ever (no date window) — fine at today's volume, bound it to a rolling window when the table grows | Medium |
 | Drag-and-drop in calendar | Low |
 | Customer list (`/customers`) | Low |
-| Activity log UI | Low |
+| Activity log UI (table exists, nothing writes to it yet) | Low |
 | GHL_WEBHOOK_PUBLIC_KEY configured | Before webhooks go live |
+| ~~Auth enabled~~ · ~~dead dev bypasses~~ · ~~dashboard real data~~ · ~~my-shifts DEV_USER~~ · ~~staff page~~ · ~~auto-SMS on create~~ | Done |
 
 ---
 
@@ -354,9 +367,111 @@ npm run dev
 **Build:** `npm run build` — passes, 0 errors  
 **Lint:** `npm run lint` — passes, 0 errors, 0 warnings
 
+**Local gotchas (2026-09-16):**
+- Port 3000 on this machine is usually a *different* project (`crm-khyte`, "Khyte CRM"). Start this app with `npx next dev -p 3005` (or any free port) before curl-testing, or every route will 307 to that other app's login.
+- If `next build` fails with `Declaration or statement expected` inside `.next/dev/types/routes.d.ts` / `validator.ts`, those generated files are corrupted (an interrupted write duplicated their tails). Delete them — the dev server regenerates them on start — then build again.
+- `npx supabase db query --linked` returns 403 for this account ("does not have the necessary privileges"), so RLS policies can't be inspected from the CLI here; use the Supabase dashboard SQL editor.
+
+---
+
+## Design system (`src/app/globals.css`)
+
+Plain CSS component classes on top of the Tailwind tokens, so any element can opt in with one class and every button/field/card in the app looks the same. Prefer these over hand-rolled Tailwind strings.
+
+| Class | Use |
+|---|---|
+| `.btn` + `.btn-primary` / `.btn-secondary` / `.btn-ghost` / `.btn-danger` / `.btn-success` | Buttons and button-styled links. Primary is the gold gradient with inner highlight and gold glow on hover. Sizes: `.btn-xs` `.btn-sm` (default) `.btn-lg`; `.btn-icon` for square icon buttons; `.btn-block` full width. |
+| `.field` (+ `.field-sm`) | Inputs, selects (custom chevron, dark options) and textareas. Gold focus ring. `.field-icon` wraps an svg + field for a leading icon. |
+| `.card` (+ `.card-tinted` with `--tint`) | Surface with border + faint top highlight. Tinted variant fades a status color in from the top (pending banners, approve box, kanban columns). |
+| `.badge` + `.badge-status` (`--badge-color`) / `.badge-outline` / `.badge-solid`, `.badge-sm` | Pills. `<StatusBadge>` renders `.badge-status` from `lib/status.ts` so labels/colors never drift. |
+| `.segmented` (`<button data-active>`) | Filter tabs (job reviews, customer tabs). |
+| `.menu` / `.menu-item` | Dropdowns and popovers (role dropdown, account switcher) — shadow calibrated for the near-black palette. |
+| `.avatar` (`-sm` / `-lg`) | Initial-letter avatars. |
+| `.empty` / `.empty-title` / `.empty-text` | Empty states with an icon. |
+| `.nav-item` (`data-active`, `data-collapsed`) | Sidebar links. |
+| `.page-title` / `.page-subtitle` | Used by `<PageHeader>`. |
+| `.plate` | Registration numbers (mono, tracked, uppercase). |
+| `.brand-mark` (`-lg`), `.auth-backdrop`, `.main-surface` | Gold "K" mark, login-screen atmosphere, faint gold wash behind the workspace. |
+
+Tokens: `--border-strong` (inputs, menus), `--primary-hover`, `--shadow-card` / `--shadow-pop` / `--shadow-modal`. Status colors were raised in saturation on 2026-09-16 (`--status-confirmed: #5EAAF5`, `--status-completed: #4ED18C`, `--status-cancelled: #F26B6B`, `--status-pending: #F2B248`, `--status-in-progress: #B28EF7`). `--radius` is `0.5rem`. Reduced-motion is respected globally.
+
 ---
 
 ## Changelog
+
+### 2026-09-16 (Calendar toolbar layout + iPhone SMS preview)
+- **Calendar toolbar rearranged per user request:** the top bar is now only `‹ ›` + title (with a muted hint: week number and date range in week view, full date in day view) on the left and **"Ny bokning" pinned top right**. The view switcher (Dag/Vecka/Månad) and the "Ansvarig" dropdown moved to the **bottom bar**, left side. The separate status dropdown is gone — the status legend chips on the right of the bottom bar are the status filter (they already were), with a new **"Alla"** chip to reset. Chip counts are computed within the current worker filter so they always add up to "Alla".
+- **SMS-mallar shows the message on an iPhone.** New `components/ui/iphone.tsx` (adapted from Magic UI's `<Iphone />`: accepts `children` inside the screen, dark titanium frame instead of `dark:` variants) and `components/sms/sms-phone-preview.tsx` — an **iOS Messages light-mode** screen (white screen so it reads against the black UI): status bar beside the Dynamic Island, contact header with the real sender id, and **exactly one received message** (the template being edited) under an "SMS · Idag HH:MM" divider. The phone sits in a card with a gold glow behind it and is **cropped with a fade at the bottom** so there is no empty screen below the message. `GET /api/sms-templates` also returns `sender` (`FORTYSIX_ELKS_FROM`, default `KOMFORT`). The card is sticky on wide screens.
+- **Everything on the screen is real time.** The status-bar clock and the "Idag HH:MM" divider show the current Stockholm time (`lib/hooks/use-live-minute.ts`, `useSyncExternalStore`, re-renders once a minute, blank until hydrated). The sample booking is *tomorrow at 10:00*, and `{date}` / `{time}` are formatted by the **same functions the real send uses** — extracted from `46elks.ts` into the client-safe `lib/sms/format.ts` (`formatSmsDate`, `formatSmsTime`, `interpolateTemplate`) so the preview cannot drift from what the customer receives.
+- Two earlier versions were rejected: (1) dark screen + Apple system font stack — on Windows that stack fell back to a font rendered in small caps, and one bubble on a black screen in a black card was mostly void; (2) a mock thread with a previous message and a green reply — user wants one SMS only. The phone uses the app font (`font-sans`). The card's "Så ser det ut för kunden" header row was also removed on request — the card starts directly with the phone; only the sample-values caption remains below it.
+- Verification: `tsc`, `eslint`, `next build` clean; not viewed in a browser by the assistant.
+
+### 2026-09-16 (Performance pass + calendar polish + /workers dropdown clipping)
+**Bug fix**
+- **`/workers` role dropdown was clipped** by the list card's `overflow-hidden` for the bottom rows. The menu is now rendered in a portal on `<body>`, positioned from the button's screen rect, and flips upward when there is no room below. Closes on scroll, resize, Escape and outside click.
+
+**Performance (why the app felt slow)**
+- **One auth round trip per page instead of three.** `getSession()` is wrapped in React's `cache()`, so the dashboard layout and the page share a single `auth.getUser()` + `profiles` query per request. The proxy no longer repeats the network auth check for `/api/*` — every route handler already does it via `requireApiUser()` (and refreshes tokens there). The proxy only fast-fails API requests that carry no `sb-*-auth-token` cookie at all (no network), and still fully verifies page requests. Net: pages 3→2 auth calls, API calls 2→1.
+- **Global transitions removed.** `* { transition-property: … }` made every element (including the ~400 grid-line `<div>`s in the week view) a transition target. Transitions are now scoped to interactive elements and the design-system classes.
+- **Calendar grid is CSS, not DOM.** Hour/half-hour lines and the new off-hours shading are `repeating-linear-gradient`s on each column (`.cal-column`, driven by `--hour-px` / `--work-start` / `--work-end` set from `calendar-utils.ts` constants). The week view dropped ~340 elements; the day view ~48.
+- **Hover no longer re-renders the world.** Lane layouts are memoized per day (`useMemo`), hover state bails out when the slot hasn't changed, and booking blocks use a `box-shadow` hover instead of `filter: brightness` (which forced GPU layers). Month view groups bookings by day once instead of filtering the whole list per cell (42×).
+- **Calendar payload trimmed**: the page now selects only the columns it renders (customer name/phone, car make/model/plate/color, worker name, job status) instead of `*` on four joined tables.
+- **`loading.tsx`** for the dashboard route group: navigation shows a shimmer skeleton immediately instead of a frozen screen while the server works.
+- Removed `backdrop-blur` from the top bar; job photo grids are `loading="lazy" decoding="async"`; page-enter animation shortened to 160ms.
+- **Note for judging speed:** `npm run dev` compiles routes on demand and is always slower than production. Judge with `npm run build && npm start`.
+
+**Calendar polish (day/week/month)**
+- Off-hours (before 07:00, after 19:00 — `WORK_START_HOUR` / `WORK_END_HOUR`) are shaded so the working day stands out; weekends get a faint tint; today's column keeps a gold wash (visible in working hours).
+- Booking blocks are now opaque (status color mixed with the card surface) with a bright title (`--foreground`), the time in the status color and muted meta lines — readable on any status color, and overlapping lanes/shading no longer bleed through. Hover lifts with a shadow.
+- "Now" line has a glowing dot and a gold time chip (`14:32`) in the hour column, updated every minute.
+- Week header shows a per-day booking count; day header shows count + total hours; weekend headers are muted.
+- Month view: per-day count, chips with time in status color and name in foreground, today's cell tinted, weekends tinted, `+N till` overflow.
+- Keyboard: `←` / `→` move a day/week/month, `T` jumps to today (ignored while typing or when a dialog is open). Nav buttons carry the shortcut in their tooltip.
+- Slot clicks are clamped to the day (no 24:00 slot).
+
+**Verification:** `tsc --noEmit` clean, `eslint src` clean, `next build` passes. Curl against the running dev server: pages 307 → `/login`, `/api/*` 401 JSON without a cookie (proxy) and with a bogus cookie (route handler), webhook 400 on invalid JSON (auth-exempt). Not verified in a signed-in browser — no credentials in the session.
+
+### 2026-09-16 (Robustness + UI pass — shared auth, API hardening, real dashboard, design system)
+**Logic / infrastructure**
+- **New `src/lib/auth/session.ts`** (`getSession`, `requireApiUser`, `REVIEWER_ROLES`, `isReviewer`) replaces the copy-pasted `auth.getUser()` + `profiles` lookup in 15 route handlers and 5 server pages. It also enforces `is_active` (deactivated staff were never actually blocked before) and rejects auth users with no profile row. **All six `NODE_ENV === 'development'` bypass branches are removed.**
+- **New `src/lib/api.ts`**: `readJsonObject` (bad JSON → 400 instead of a 500), `pickAllowed` (allow-listed patches), small validators.
+- **`/my-shifts` was broken in production**: it still used a hardcoded `DEV_USER` UUID, so it listed nothing and creating a shift failed RLS for every real user. Now a server page resolves the session and renders `components/shifts/my-shifts-view.tsx`; the modal no longer sends a `workerId` — the server uses the session.
+- **`POST /api/shifts/approve` trusted `reviewerId` from the request body.** The reviewer is now always the signed-in user; only `pending` shifts can be approved/rejected (409 otherwise) and the update is guarded with `.eq('status','pending')` against double-clicks.
+- **`PATCH /api/bookings/[id]` and `PATCH /api/customers/[id]` spread the raw body into the update** — any column was writable. Both are allow-listed and validated; booking PATCH/DELETE are admin-only on the server (matching RLS and the UI).
+- **`DELETE /api/bookings/[id]` reported success when nothing was deleted.** There is no delete policy on `bookings` in any migration, so a session-scoped delete affected 0 rows and the UI still said "Bokningen togs bort". It now verifies the row exists, detaches `sms_logs` (which reference bookings with no cascade and made deletes fail once an SMS had been sent), deletes with the service client after the admin check, and returns 404/409 if nothing was removed. Migration `010` adds the policy + `on delete set null` for the long term.
+- **Jobs:** `POST /api/jobs` returns the existing job (200) instead of a 500 on the `unique(booking_id)` constraint; workers become the job's worker themselves (and an unassigned booking is assigned to them on first photo); a worker cannot start a job on a booking assigned to someone else. `PATCH /api/jobs/[id]` no longer lets a worker set `status=completed` or `admin_notes` (that bypassed review). Image upload validates `image/*`, ≤15 MB, ownership, and removes the storage object if the DB insert fails.
+- **Bookings create:** phone numbers are normalised to E.164 before the customer lookup, so "070-123 45 67" and "+46701234567" are one customer; a car is reused when the customer already has one with the same plate (every booking used to insert a new car row). Status/duration/date/price are validated. The SMS flow is extracted to **`src/lib/sms/confirmation.ts`** and shared with approve (the create copy previously lacked the duplicate/stale-pending handling).
+- **Approve:** rejects non-pending bookings (409); the "approved" email to the worker is now sent only after the SMS outcome is known, so a booking that reverted to pending no longer emails "Din bokning har godkänts".
+- **Workers:** `PATCH /api/workers/[id]` refuses to edit your own account and refuses to demote/deactivate the last active administrator; `POST` validates the email and rejects duplicates with 409. `/workers` locks your own row.
+- **Manual SMS** (`/api/sms/send`) no longer flips `bookings.sms_confirmation_sent` — a manual message isn't the confirmation.
+- **Email (`resend.ts`)**: try/catch + 10s timeout (a network error used to be an unhandled rejection from a fire-and-forget call) and HTML-escaping of customer names/plates/reasons. Dates rendered in Europe/Stockholm.
+- **Service client** is now typed with `Database` and reads `SUPABASE_SECRET_KEY` (falls back to `SUPABASE_SERVICE_ROLE_KEY`) with a clear error if neither is set.
+- **Dashboard shows real data**: today's bookings (Europe/Stockholm day bounds via `lib/time.ts`), pending count, active jobs, completed today, recently added bookings with "inlagd av". Previously hardcoded zeros and an empty list.
+- **Migrations `009` and `010` added** — see the Database section; **`010` still needs to be run on the live DB.**
+- Lint: the two pre-existing `react-hooks/set-state-in-effect` errors in `sidebar.tsx` are fixed properly (`useSyncExternalStore` for the collapsed flag and the known-accounts list).
+
+**UI / UX**
+- **Design system in `globals.css`** (see the section above): `.btn*`, `.field`, `.card`, `.badge`, `.segmented`, `.menu`, `.avatar`, `.empty`, `.nav-item`. Every button, input, select, textarea, card and badge in the app was swept onto these. The gold primary button has a real gradient, inner highlight and glow; secondary buttons are raised; selects get a custom chevron; inputs get an inset shadow and a gold focus ring.
+- **Stronger colors**: status tokens raised in saturation, borders lifted (`#33302C` / `--border-strong #433F39`), foreground brightened, `--radius` 6→8px. Scrollbar recolored from the old bluish grey to warm neutrals. Text selection is gold.
+- **Shared status module** (`lib/status.ts` + `<StatusBadge>`): labels were inconsistent across files ("Väntande" vs "Väntar", "Pågående" vs "Pågår"); one source now.
+- **Sidebar**: gold "K" brand mark + "KOM-fort / Bilvård" wordmark in the previously empty header (the sidebar and browser title said "RenGör", a stale name); nav split into main + "Administration"; 16px icons; the non-functional notification bell is removed; account popup uses `.menu`.
+- **Top bar** titles cover every route (Mina pass, Granskning, SMS-mallar, Kund, Bokning were showing "Portal").
+- **Login**: brand mark, card, gold primary button, subtle gold radial glow + grain backdrop.
+- **Dashboard**: greeting header with a "Ny bokning" shortcut (`/calendar?new=1` opens the create modal directly), 4 clickable stat cards, "Dagens schema" list + "Senast inlagda" side by side on wide screens.
+- **Calendar**: toolbar on `.btn`/`.field`; booking blocks have a hairline border + rounded corners; today's date circle glows; legend chips are proper buttons with an active state.
+- **Create-booking modal**: proper labels for every field (was placeholder-only), 2-column layout, footer note explains whether an SMS will go out for the chosen status, clearer success/failure toasts.
+- **Booking detail page**: title is the customer, subtitle car + plate + service, `<StatusBadge>` on the right; status is chosen with badge pills; non-admins see read-only rows instead of greyed-out inputs; "Osparade ändringar" + Save disabled until dirty; the Save/Delete bar floats at the bottom while scrolling; approval box is a tinted card.
+- **Customer page**: header actions (call / email), 4 stat cards, cars + notes side by side, segmented tabs, SMS rows show sent/failed/unknown badges and error text; notes are editable only for admin/manager (the API rejects workers anyway).
+- **Workers page**: role badges with glowing dots, `.menu` dropdown, add-employee form as a card, active/inactive summary in the subtitle.
+- **Job reviews**: segmented filter in the header, `<StatusBadge kind="job">`, "Öppna bokning" link on each pending card, dedicated empty state.
+- **SMS template page**: live preview of the rendered message as an SMS bubble with sample values, "Ångra" button, warning for unused variables, save disabled until dirty.
+- **My shifts**: subtitle with total pass / approved hours / pending count, shifts sorted newest first, linked bookings are links, status via `<StatusBadge kind="shift">`.
+- **Jobs board**: tinted columns per status from `JOB_STATUS`, plates in `.plate`.
+- **Banners**: tinted cards, green/red icon buttons, booking rows link to the booking and show who submitted it.
+- Metadata title is now "KOM-fort Bilvård — Portal" with a `%s · KOM-fort Bilvård` template.
+
+**Verification:** `tsc --noEmit` clean, `eslint src` clean (0 errors), `next build` passes after deleting the corrupted generated `.next/dev/types` files (see "Local gotchas"). Curl smoke tests against a fresh dev server on port 3005: `/login` 200, protected pages 307 → `/login`, all `/api/*` 401 JSON, spoofed-reviewer `POST /api/shifts/approve` 401, unauthenticated DELETE 401, `/api/webhooks/ghl` bypasses the session gate and reaches the handler (400 on invalid JSON, no DB write). **Not verified:** any authenticated browser flow — no credentials were available in this session.
+**Removed:** `components/shifts/pending-shifts-panel.tsx` (unused), the `DEV_USER` stub, all `isDev` branches.
 
 ### 2026-07-28 (Staff page role-dropdown overlap fix)
 - **`/workers`'s role dropdown looked like it was rendering duplicate/overlapping content.** `RoleDropdown` (`(dashboard)/workers/page.tsx`) opened its menu with `bg-card border border-border` and a plain `shadow-lg` — but `bg-card` (`#191817`) sits almost on top of the surrounding row/table background in this near-black palette, and Tailwind's default `shadow-lg` is calibrated for light UIs, so it barely registers here. The open menu had no real visual boundary from the row content behind/below it, so it read as a badge bleeding through another badge rather than a floating menu.

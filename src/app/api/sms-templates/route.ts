@@ -1,64 +1,41 @@
 import { NextRequest, NextResponse } from 'next/server'
-import { createClient } from '@/lib/supabase/server'
+import { requireApiUser } from '@/lib/auth/session'
 import { createServiceClient } from '@/lib/supabase/service'
+import { jsonError, readJsonObject, isNonEmptyString } from '@/lib/api'
 
-// GET /api/sms-templates — returns the single active template (auth required)
+const MAX_BODY_CHARS = 600
+
+// GET /api/sms-templates — the single active template (any signed-in staff)
 export async function GET() {
-  const sessionClient = await createClient()
-  const { data: { user } } = await sessionClient.auth.getUser()
+  const auth = await requireApiUser()
+  if (!auth.ok) return auth.response
+  const { supabase } = auth
 
-  const isDev = process.env.NODE_ENV === 'development'
-  if (!user && !isDev) {
-    return NextResponse.json({ error: 'Unauthorized' }, { status: 401 })
-  }
-
-  const service = createServiceClient()
-  const { data, error } = await service
+  const { data, error } = await supabase
     .from('sms_templates')
     .select('id, name, body, is_active, updated_at')
     .eq('is_active', true)
     .limit(1)
     .maybeSingle()
 
-  if (error) {
-    return NextResponse.json({ error: error.message }, { status: 500 })
-  }
+  if (error) return jsonError(error.message, 500)
+  if (!data)  return jsonError('Ingen aktiv mall konfigurerad', 404)
 
-  if (!data) {
-    return NextResponse.json({ error: 'No active template configured' }, { status: 404 })
-  }
-
-  return NextResponse.json(data)
+  // The sender id customers see on their phone (46elks alphanumeric sender).
+  return NextResponse.json({ ...data, sender: process.env.FORTYSIX_ELKS_FROM ?? 'KOMFORT' })
 }
 
-// PATCH /api/sms-templates — updates the body of the active template (admin only)
-// Body: { id: string; body: string }
+// PATCH /api/sms-templates { id, body } — update the active template (admin only)
 export async function PATCH(request: NextRequest) {
-  const sessionClient = await createClient()
-  const { data: { user } } = await sessionClient.auth.getUser()
+  const auth = await requireApiUser(['admin'])
+  if (!auth.ok) return auth.response
 
-  const isDev = process.env.NODE_ENV === 'development'
-  if (!user && !isDev) {
-    return NextResponse.json({ error: 'Unauthorized' }, { status: 401 })
-  }
+  const json = await readJsonObject(request)
+  if (!json) return jsonError('Ogiltig JSON', 400)
 
-  if (user) {
-    const { data: actor } = await sessionClient
-      .from('profiles')
-      .select('role')
-      .eq('id', user.id)
-      .single()
-
-    if ((actor as { role: string } | null)?.role !== 'admin') {
-      return NextResponse.json({ error: 'Forbidden' }, { status: 403 })
-    }
-  }
-
-  const { id, body } = await request.json() as { id: string; body: string }
-
-  if (!id || !body?.trim()) {
-    return NextResponse.json({ error: 'id and body required' }, { status: 400 })
-  }
+  const { id, body } = json
+  if (!isNonEmptyString(id) || !isNonEmptyString(body)) return jsonError('id och body krävs', 400)
+  if (body.trim().length > MAX_BODY_CHARS) return jsonError(`Mallen får vara högst ${MAX_BODY_CHARS} tecken`, 400)
 
   const service = createServiceClient()
   const { data, error } = await service
@@ -66,11 +43,10 @@ export async function PATCH(request: NextRequest) {
     .update({ body: body.trim(), updated_at: new Date().toISOString() })
     .eq('id', id)
     .select('id, name, body, updated_at')
-    .single()
+    .maybeSingle()
 
-  if (error) {
-    return NextResponse.json({ error: error.message }, { status: 500 })
-  }
+  if (error) return jsonError(error.message, 500)
+  if (!data)  return jsonError('Mallen hittades inte', 404)
 
   return NextResponse.json(data)
 }

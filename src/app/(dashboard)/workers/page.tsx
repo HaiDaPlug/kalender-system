@@ -1,90 +1,130 @@
 'use client'
 
-import { useState, useEffect } from 'react'
-import { Loader2, UserCheck, UserX, ChevronDown, Plus, X, Info } from 'lucide-react'
+import { useState, useEffect, useRef, type CSSProperties } from 'react'
+import { createPortal } from 'react-dom'
+import { Loader2, UserCheck, UserX, ChevronDown, Plus, X, Info, Users } from 'lucide-react'
 import { toast } from 'sonner'
 import type { Profile, UserRole } from '@/types'
 import { cn } from '@/lib/utils/cn'
+import { PageHeader } from '@/components/ui/page-header'
 
-const ROLE_CONFIG: Record<UserRole, { label: string; textClass: string; bgClass: string; dotClass: string }> = {
-  admin:   { label: 'Administratör', textClass: 'text-role-admin',   bgClass: 'bg-role-admin/10',   dotClass: 'bg-role-admin' },
-  manager: { label: 'Admin',         textClass: 'text-role-manager', bgClass: 'bg-role-manager/10', dotClass: 'bg-role-manager' },
-  worker:  { label: 'Personal',      textClass: 'text-role-worker',  bgClass: 'bg-role-worker/10',  dotClass: 'bg-role-worker' },
+const ROLE_CONFIG: Record<UserRole, { label: string; color: string }> = {
+  admin:   { label: 'Administratör', color: 'var(--role-admin)' },
+  manager: { label: 'Admin',         color: 'var(--role-manager)' },
+  worker:  { label: 'Personal',      color: 'var(--role-worker)' },
 }
 
-// Permissions per role — matches actual enforcement in the codebase
+// Permissions per role — matches actual enforcement in the API routes
 const ROLE_PERMISSIONS: Record<UserRole, string[]> = {
-  admin:   ['Se kalender', 'Skapa bokningar', 'Redigera bokningar', 'Ta bort bokningar', 'Hantera personal', 'Granska jobb', 'Godkänna/avvisa bokningar'],
-  manager: ['Se kalender', 'Granska jobb', 'Godkänna/avvisa bokningar'],
+  admin:   ['Se kalender', 'Skapa bokningar', 'Redigera bokningar', 'Ta bort bokningar', 'Hantera personal', 'Granska jobb', 'Godkänna/avvisa bokningar', 'Godkänna pass', 'Redigera SMS-mall'],
+  manager: ['Se kalender', 'Skapa bokningar', 'Granska jobb', 'Godkänna/avvisa bokningar', 'Godkänna pass', 'Redigera kundanteckningar'],
   worker:  ['Se kalender', 'Skicka in bokningar (kräver godkännande)', 'Ladda upp jobbfoton', 'Hantera egna pass'],
 }
-
 
 const ROLE_DESCRIPTIONS: Record<UserRole, { title: string; description: string; useCase: string }> = {
   admin: {
     title: 'Administratör — superadmin',
     description: 'Kan göra allt i systemet: skapa och redigera bokningar, hantera personal, godkänna eller avvisa biljobb och se hela kalendern.',
-    useCase: 'Används av dig (Goran). Bör bara finnas på ett konto.',
+    useCase: 'Används av ägaren. Bör bara finnas på ett eller två konton.',
   },
   manager: {
     title: 'Admin — delegerad godkännanderätt',
-    description: 'Kan godkänna och avvisa inkommande biljobb precis som Administratören. Kan inte ändra andra bokningar, ta bort data eller hantera personal.',
+    description: 'Kan godkänna och avvisa inkommande bokningar, pass och jobb precis som Administratören. Kan inte redigera eller ta bort bokningar eller hantera personal.',
     useCase: 'Ge denna roll till någon du litar på när du är bortrest eller otillgänglig. De kan hålla flödet igång utan att ha full kontroll.',
   },
   worker: {
     title: 'Personal — standardroll',
-    description: 'Kan skicka in nya biljobb via kalendern. Bokningen hamnar som "väntande" och måste godkännas av en Admin eller Administratör innan den bekräftas.',
+    description: 'Kan skicka in nya bokningar via kalendern. Bokningen hamnar som "väntar" och måste godkännas av en Admin eller Administratör innan den bekräftas.',
     useCase: 'Standardroll för alla nya anställda. Alla nya konton börjar här.',
   },
 }
 
+function RoleBadge({ role, className }: { role: UserRole; className?: string }) {
+  return (
+    <span className={cn('badge badge-status', className)} style={{ '--badge-color': ROLE_CONFIG[role].color } as CSSProperties}>
+      {ROLE_CONFIG[role].label}
+    </span>
+  )
+}
+
+const MENU_HEIGHT_PX = 132 // 3 items — used to decide whether to open upward
+
+/*
+  The menu is rendered in a portal on <body>, positioned from the button's
+  screen rect. Rendering it inline meant the list card's overflow-hidden clipped
+  it for the bottom rows.
+*/
 function RoleDropdown({ current, onChange, disabled }: {
   current: UserRole
   onChange: (role: UserRole) => void
   disabled?: boolean
 }) {
   const [open, setOpen] = useState(false)
-  const cfg = ROLE_CONFIG[current]
+  const [pos, setPos] = useState<CSSProperties>({})
+  const btnRef = useRef<HTMLButtonElement>(null)
+
+  function toggle() {
+    if (disabled) return
+    if (open) { setOpen(false); return }
+    const r = btnRef.current?.getBoundingClientRect()
+    if (!r) return
+    const right = window.innerWidth - r.right
+    const fitsBelow = r.bottom + 6 + MENU_HEIGHT_PX <= window.innerHeight
+    setPos(fitsBelow
+      ? { top: r.bottom + 6, right }
+      : { bottom: window.innerHeight - r.top + 6, right })
+    setOpen(true)
+  }
+
+  useEffect(() => {
+    if (!open) return
+    const close = () => setOpen(false)
+    const onKey = (e: KeyboardEvent) => { if (e.key === 'Escape') close() }
+    window.addEventListener('scroll', close, true)
+    window.addEventListener('resize', close)
+    window.addEventListener('keydown', onKey)
+    return () => {
+      window.removeEventListener('scroll', close, true)
+      window.removeEventListener('resize', close)
+      window.removeEventListener('keydown', onKey)
+    }
+  }, [open])
 
   return (
-    <div className="relative">
+    <>
       <button
-        onClick={() => !disabled && setOpen(v => !v)}
+        ref={btnRef}
+        onClick={toggle}
         disabled={disabled}
-        className={cn(
-          'flex items-center gap-1.5 px-2.5 py-1 rounded text-xs font-medium transition-colors',
-          cfg.textClass, cfg.bgClass,
-          disabled ? 'cursor-default opacity-60' : 'hover:opacity-80 cursor-pointer'
-        )}
+        aria-haspopup="menu"
+        aria-expanded={open}
+        className={cn('badge badge-status transition-all', disabled ? 'cursor-default opacity-70' : 'hover:brightness-115 cursor-pointer')}
+        style={{ '--badge-color': ROLE_CONFIG[current].color } as CSSProperties}
       >
-        {cfg.label}
-        {!disabled && <ChevronDown className="h-3 w-3" />}
+        {ROLE_CONFIG[current].label}
+        {!disabled && <ChevronDown className="h-3 w-3 -mr-0.5" />}
       </button>
 
-      {open && (
+      {open && createPortal(
         <>
           <div className="fixed inset-0 z-40" onClick={() => setOpen(false)} />
-          <div
-            className="absolute right-0 top-full mt-1.5 z-50 bg-popover border border-border/80 rounded overflow-hidden min-w-36 animate-scale-in"
-            style={{ boxShadow: '0 8px 24px -4px rgba(0,0,0,0.6), 0 2px 8px -2px rgba(0,0,0,0.5)' }}
-          >
+          <div role="menu" className="menu fixed z-50 min-w-40 animate-scale-in" style={pos}>
             {(Object.keys(ROLE_CONFIG) as UserRole[]).map(role => (
               <button
                 key={role}
+                role="menuitem"
                 onClick={() => { onChange(role); setOpen(false) }}
-                className={cn(
-                  'w-full flex items-center gap-2 px-3 py-2 text-xs text-left hover:bg-secondary transition-colors',
-                  role === current && 'bg-secondary/60'
-                )}
+                className={cn('menu-item', role === current && 'bg-secondary/60 text-foreground')}
               >
-                <div className={`h-1.5 w-1.5 rounded-full ${ROLE_CONFIG[role].dotClass}`} />
+                <div className="h-1.5 w-1.5 rounded-full" style={{ background: ROLE_CONFIG[role].color }} />
                 {ROLE_CONFIG[role].label}
               </button>
             ))}
           </div>
-        </>
+        </>,
+        document.body,
       )}
-    </div>
+    </>
   )
 }
 
@@ -92,34 +132,31 @@ function RoleDelegationGuide() {
   const [open, setOpen] = useState(false)
 
   return (
-    <div className="rounded border border-border bg-card overflow-hidden">
+    <div className="card overflow-hidden">
       <button
         onClick={() => setOpen(v => !v)}
-        className="w-full flex items-center gap-2.5 px-4 py-3 text-left hover:bg-secondary/30 transition-colors"
+        className="w-full flex items-center gap-2.5 px-4 py-3 text-left hover:bg-secondary/40 transition-colors"
       >
         <Info className="h-4 w-4 text-primary shrink-0" />
-        <span className="text-sm font-medium flex-1">Vad innebär varje roll? — guide för delegering</span>
+        <span className="text-sm font-medium flex-1">Vad innebär varje roll?</span>
         <ChevronDown className={cn('h-4 w-4 text-muted-foreground transition-transform', open && 'rotate-180')} />
       </button>
 
       {open && (
         <div className="border-t border-border divide-y divide-border/60">
           {(Object.keys(ROLE_DESCRIPTIONS) as UserRole[]).map(role => {
-            const cfg = ROLE_CONFIG[role]
             const desc = ROLE_DESCRIPTIONS[role]
             return (
               <div key={role} className="px-4 py-4 space-y-2">
                 <div className="flex items-center gap-2">
-                  <div className={`h-2 w-2 rounded-full shrink-0 ${cfg.dotClass}`} />
-                  <p className={`text-sm font-semibold ${cfg.textClass}`}>{desc.title}</p>
+                  <div className="h-2 w-2 rounded-full shrink-0" style={{ background: ROLE_CONFIG[role].color }} />
+                  <p className="text-sm font-semibold" style={{ color: ROLE_CONFIG[role].color }}>{desc.title}</p>
                 </div>
                 <p className="text-sm text-foreground/90 pl-4">{desc.description}</p>
                 <p className="text-xs text-muted-foreground pl-4 italic">{desc.useCase}</p>
                 <div className="flex flex-wrap gap-1.5 pl-4 pt-1">
                   {ROLE_PERMISSIONS[role].map(perm => (
-                    <span key={perm} className="text-xs px-2 py-0.5 rounded border border-border text-muted-foreground">
-                      {perm}
-                    </span>
+                    <span key={perm} className="badge badge-sm badge-outline font-medium">{perm}</span>
                   ))}
                 </div>
               </div>
@@ -131,111 +168,79 @@ function RoleDelegationGuide() {
   )
 }
 
-function WorkerRow({ worker, onRoleChange, onToggleActive }: {
+function WorkerRow({ worker, locked, onRoleChange, onToggleActive }: {
   worker: Profile
+  locked: boolean
   onRoleChange: (id: string, role: UserRole) => void
   onToggleActive: (id: string, active: boolean) => void
 }) {
   const [expanded, setExpanded] = useState(false)
   const [saving, setSaving] = useState(false)
 
-  async function handleRoleChange(role: UserRole) {
+  async function patch(body: { role?: UserRole; is_active?: boolean }, onOk: () => void, errTitle: string) {
     setSaving(true)
     const res = await fetch(`/api/workers/${worker.id}`, {
       method: 'PATCH',
       headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ role }),
+      body: JSON.stringify(body),
     })
     if (res.ok) {
-      onRoleChange(worker.id, role)
-      toast.success('Rollen uppdaterades')
+      onOk()
     } else {
       const d = await res.json().catch(() => ({}))
-      toast.error('Kunde inte ändra roll', {
-        description: d.error ?? `${res.status} ${res.statusText}`,
-      })
-    }
-    setSaving(false)
-  }
-
-  async function handleToggleActive() {
-    setSaving(true)
-    const res = await fetch(`/api/workers/${worker.id}`, {
-      method: 'PATCH',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ is_active: !worker.is_active }),
-    })
-    if (res.ok) {
-      onToggleActive(worker.id, !worker.is_active)
-      toast.success(worker.is_active ? 'Anställd avaktiverad' : 'Anställd aktiverad')
-    } else {
-      const d = await res.json().catch(() => ({}))
-      toast.error('Kunde inte ändra status', {
-        description: d.error ?? `${res.status} ${res.statusText}`,
-      })
+      toast.error(errTitle, { description: d.error ?? `${res.status} ${res.statusText}` })
     }
     setSaving(false)
   }
 
   return (
     <li className={cn('border-b border-border last:border-0 transition-colors', !worker.is_active && 'opacity-50')}>
-      {/* Main row */}
       <div
-        className="flex items-center gap-3 px-5 py-3 hover:bg-secondary/30 cursor-pointer"
+        className="flex items-center gap-3 px-4 py-3 hover:bg-secondary/40 cursor-pointer"
         onClick={() => setExpanded(v => !v)}
       >
-        <div className="h-8 w-8 rounded-full bg-primary/10 border border-primary/20 flex items-center justify-center text-xs font-semibold text-primary shrink-0">
-          {worker.full_name?.charAt(0) ?? '?'}
-        </div>
+        <div className="avatar">{worker.full_name?.charAt(0) ?? '?'}</div>
         <div className="flex-1 min-w-0">
-          <p className="text-sm font-medium truncate">{worker.full_name}</p>
+          <p className="text-sm font-medium truncate">
+            {worker.full_name}
+            {locked && <span className="ml-2 text-[11px] text-muted-foreground font-normal">(du)</span>}
+          </p>
           <p className="text-xs text-muted-foreground truncate">{worker.email}</p>
         </div>
         <span className="text-xs text-muted-foreground tabular hidden sm:block w-28 shrink-0">
           {worker.phone ?? '—'}
         </span>
-        <div onClick={e => e.stopPropagation()}>
+        <div onClick={e => e.stopPropagation()} className="w-32 flex justify-end">
           <RoleDropdown
             current={worker.role}
-            onChange={handleRoleChange}
-            disabled={saving || worker.role === 'admin'}
+            onChange={role => patch({ role }, () => { onRoleChange(worker.id, role); toast.success('Rollen uppdaterades') }, 'Kunde inte ändra roll')}
+            disabled={saving || locked}
           />
         </div>
         <button
-          onClick={e => { e.stopPropagation(); void handleToggleActive() }}
-          disabled={saving || worker.role === 'admin'}
+          onClick={e => {
+            e.stopPropagation()
+            const next = !worker.is_active
+            void patch({ is_active: next }, () => { onToggleActive(worker.id, next); toast.success(next ? 'Anställd aktiverad' : 'Anställd avaktiverad') }, 'Kunde inte ändra status')
+          }}
+          disabled={saving || locked}
           title={worker.is_active ? 'Avaktivera' : 'Aktivera'}
+          aria-label={worker.is_active ? 'Avaktivera' : 'Aktivera'}
           className={cn(
-            'h-7 w-7 flex items-center justify-center rounded transition-colors shrink-0',
-            worker.is_active
-              ? 'text-status-completed hover:bg-destructive/10 hover:text-destructive'
-              : 'text-muted-foreground hover:bg-status-completed/10 hover:text-status-completed',
-            'disabled:opacity-40 disabled:pointer-events-none'
+            'btn btn-ghost btn-icon btn-sm',
+            worker.is_active ? 'text-status-completed hover:text-destructive hover:bg-destructive/10' : 'hover:text-status-completed hover:bg-status-completed/10'
           )}
         >
-          {saving
-            ? <Loader2 className="h-3.5 w-3.5 animate-spin" />
-            : worker.is_active
-            ? <UserCheck className="h-3.5 w-3.5" />
-            : <UserX className="h-3.5 w-3.5" />
-          }
+          {saving ? <Loader2 className="animate-spin" /> : worker.is_active ? <UserCheck /> : <UserX />}
         </button>
       </div>
 
-      {/* Expanded: show permissions for this role */}
       {expanded && (
-        <div className="px-5 pb-4 pt-2 bg-secondary/10 border-t border-border/50">
-          <p className="label-caps text-muted-foreground mb-2">
-            Behörigheter — {ROLE_CONFIG[worker.role].label}
-          </p>
+        <div className="px-4 pb-4 pt-2 bg-secondary/20 border-t border-border/60">
+          <p className="label-caps mb-2">Behörigheter — {ROLE_CONFIG[worker.role].label}</p>
           <div className="flex flex-wrap gap-1.5">
             {ROLE_PERMISSIONS[worker.role].map(perm => (
-              <span
-                key={perm}
-                className="text-xs px-2 py-0.5 rounded border border-border text-muted-foreground"
-              >
-                {perm}
-              </span>
+              <span key={perm} className="badge badge-sm badge-outline font-medium">{perm}</span>
             ))}
           </div>
         </div>
@@ -244,14 +249,15 @@ function WorkerRow({ worker, onRoleChange, onToggleActive }: {
   )
 }
 
-function AddWorkerForm({ onAdded }: { onAdded: (w: Profile) => void }) {
-  const [open, setOpen]         = useState(false)
-  const [saving, setSaving]     = useState(false)
+function AddWorkerForm({ open, onClose, onAdded }: { open: boolean; onClose: () => void; onAdded: (w: Profile) => void }) {
+  const [saving, setSaving]       = useState(false)
   const [formError, setFormError] = useState<string | null>(null)
-  const [fullName, setFullName] = useState('')
-  const [email, setEmail]       = useState('')
-  const [phone, setPhone]       = useState('')
-  const [role, setRole]         = useState<UserRole>('worker')
+  const [fullName, setFullName]   = useState('')
+  const [email, setEmail]         = useState('')
+  const [phone, setPhone]         = useState('')
+  const [role, setRole]           = useState<UserRole>('worker')
+
+  if (!open) return null
 
   async function handleSubmit(e: React.FormEvent) {
     e.preventDefault()
@@ -266,7 +272,7 @@ function AddWorkerForm({ onAdded }: { onAdded: (w: Profile) => void }) {
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({ full_name: fullName, email, phone, role }),
     })
-    const data = await res.json()
+    const data = await res.json().catch(() => ({}))
     if (!res.ok) {
       const message = data.error ?? `${res.status} ${res.statusText}`
       setFormError(message)
@@ -275,72 +281,40 @@ function AddWorkerForm({ onAdded }: { onAdded: (w: Profile) => void }) {
       return
     }
     onAdded(data as Profile)
-    toast.success('Anställd tillagd')
+    toast.success('Anställd tillagd', { description: 'En inbjudan har skickats via e-post' })
     setFullName(''); setEmail(''); setPhone(''); setRole('worker')
-    setOpen(false)
     setSaving(false)
-  }
-
-  if (!open) {
-    return (
-      <button
-        onClick={() => setOpen(true)}
-        className="flex items-center gap-1.5 px-3 py-1.5 rounded bg-primary text-primary-foreground text-xs font-medium hover:opacity-90 transition-opacity"
-      >
-        <Plus className="h-3.5 w-3.5" />
-        Lägg till anställd
-      </button>
-    )
+    onClose()
   }
 
   return (
-    <form
-      onSubmit={e => void handleSubmit(e)}
-      className="rounded border border-border bg-card p-4 space-y-3"
-    >
+    <form onSubmit={e => void handleSubmit(e)} className="card p-4 space-y-4 animate-scale-in">
       <div className="flex items-center justify-between">
-        <p className="text-sm font-semibold">Ny anställd</p>
-        <button type="button" onClick={() => setOpen(false)} className="text-muted-foreground hover:text-foreground">
-          <X className="h-4 w-4" />
+        <div>
+          <p className="text-sm font-semibold">Ny anställd</p>
+          <p className="text-xs text-muted-foreground mt-0.5">Personen får ett e-postmeddelande för att välja lösenord</p>
+        </div>
+        <button type="button" onClick={onClose} aria-label="Stäng" className="btn btn-ghost btn-icon btn-sm">
+          <X />
         </button>
       </div>
 
-      <div className="grid grid-cols-2 gap-3">
-        <div className="space-y-1">
-          <label className="label-caps text-muted-foreground">Namn *</label>
-          <input
-            value={fullName}
-            onChange={e => setFullName(e.target.value)}
-            placeholder="För- och efternamn"
-            className="w-full h-9 px-3 text-sm rounded border border-border bg-secondary focus:outline-none focus:ring-1 focus:ring-primary placeholder:text-muted-foreground"
-          />
+      <div className="grid sm:grid-cols-2 gap-3">
+        <div className="space-y-1.5">
+          <label className="label-caps block" htmlFor="nw-name">Namn *</label>
+          <input id="nw-name" value={fullName} onChange={e => setFullName(e.target.value)} placeholder="För- och efternamn" className="field" />
         </div>
-        <div className="space-y-1">
-          <label className="label-caps text-muted-foreground">E-post *</label>
-          <input
-            type="email"
-            value={email}
-            onChange={e => setEmail(e.target.value)}
-            placeholder="namn@exempel.se"
-            className="w-full h-9 px-3 text-sm rounded border border-border bg-secondary focus:outline-none focus:ring-1 focus:ring-primary placeholder:text-muted-foreground"
-          />
+        <div className="space-y-1.5">
+          <label className="label-caps block" htmlFor="nw-email">E-post *</label>
+          <input id="nw-email" type="email" value={email} onChange={e => setEmail(e.target.value)} placeholder="namn@exempel.se" className="field" />
         </div>
-        <div className="space-y-1">
-          <label className="label-caps text-muted-foreground">Telefon</label>
-          <input
-            value={phone}
-            onChange={e => setPhone(e.target.value)}
-            placeholder="07X-XXX XX XX"
-            className="w-full h-9 px-3 text-sm rounded border border-border bg-secondary focus:outline-none focus:ring-1 focus:ring-primary placeholder:text-muted-foreground"
-          />
+        <div className="space-y-1.5">
+          <label className="label-caps block" htmlFor="nw-phone">Telefon</label>
+          <input id="nw-phone" value={phone} onChange={e => setPhone(e.target.value)} placeholder="07X-XXX XX XX" className="field" />
         </div>
-        <div className="space-y-1">
-          <label className="label-caps text-muted-foreground">Roll</label>
-          <select
-            value={role}
-            onChange={e => setRole(e.target.value as UserRole)}
-            className="w-full h-9 px-3 text-sm rounded border border-border bg-secondary focus:outline-none focus:ring-1 focus:ring-primary"
-          >
+        <div className="space-y-1.5">
+          <label className="label-caps block" htmlFor="nw-role">Roll</label>
+          <select id="nw-role" value={role} onChange={e => setRole(e.target.value as UserRole)} className="field">
             {(Object.keys(ROLE_CONFIG) as UserRole[]).filter(r => r !== 'admin').map(r => (
               <option key={r} value={r}>{ROLE_CONFIG[r].label}</option>
             ))}
@@ -349,23 +323,13 @@ function AddWorkerForm({ onAdded }: { onAdded: (w: Profile) => void }) {
       </div>
 
       {formError && (
-        <p className="text-xs text-destructive bg-destructive/10 px-3 py-2 rounded">{formError}</p>
+        <p className="text-xs text-destructive bg-destructive/12 border border-destructive/30 px-3 py-2 rounded-md">{formError}</p>
       )}
 
       <div className="flex justify-end gap-2">
-        <button
-          type="button"
-          onClick={() => setOpen(false)}
-          className="px-3 py-1.5 text-xs rounded border border-border hover:bg-secondary transition-colors"
-        >
-          Avbryt
-        </button>
-        <button
-          type="submit"
-          disabled={saving}
-          className="flex items-center gap-1.5 px-4 py-1.5 text-xs rounded bg-primary text-primary-foreground hover:opacity-90 disabled:opacity-50 transition-opacity font-medium"
-        >
-          {saving ? <Loader2 className="h-3 w-3 animate-spin" /> : <Plus className="h-3 w-3" />}
+        <button type="button" onClick={onClose} className="btn btn-secondary btn-sm">Avbryt</button>
+        <button type="submit" disabled={saving} className="btn btn-primary btn-sm">
+          {saving ? <Loader2 className="animate-spin" /> : <Plus />}
           Lägg till
         </button>
       </div>
@@ -375,15 +339,19 @@ function AddWorkerForm({ onAdded }: { onAdded: (w: Profile) => void }) {
 
 export default function WorkersPage() {
   const [workers, setWorkers] = useState<Profile[]>([])
+  const [myId, setMyId]       = useState<string | null>(null)
   const [loading, setLoading] = useState(true)
   const [error, setError]     = useState<string | null>(null)
+  const [adding, setAdding]   = useState(false)
 
   useEffect(() => {
-    async function load() {
+    (async () => {
       // ?all=true includes inactive employees so they can be reactivated
-      const res = await fetch('/api/workers?all=true')
+      const [res, meRes] = await Promise.all([fetch('/api/workers?all=true'), fetch('/api/me')])
+      if (meRes.ok) setMyId(((await meRes.json()) as { id: string }).id)
       if (!res.ok) {
-        const message = `${res.status} ${res.statusText}`
+        const d = await res.json().catch(() => ({}))
+        const message = d.error ?? `${res.status} ${res.statusText}`
         setError(message)
         toast.error('Kunde inte hämta personal', { description: message })
         setLoading(false)
@@ -391,53 +359,34 @@ export default function WorkersPage() {
       }
       setWorkers(await res.json())
       setLoading(false)
-    }
-    void load()
+    })()
   }, [])
 
-  function handleRoleChange(id: string, role: UserRole) {
-    setWorkers(prev => prev.map(w => w.id === id ? { ...w, role } : w))
-  }
-
-  function handleToggleActive(id: string, active: boolean) {
-    setWorkers(prev => prev.map(w => w.id === id ? { ...w, is_active: active } : w))
-  }
-
-  function handleAdded(worker: Profile) {
-    setWorkers(prev => [...prev, worker])
-  }
-
-  // Active employees first, then alphabetically
   const sorted = [...workers].sort((a, b) => {
     if (a.is_active !== b.is_active) return a.is_active ? -1 : 1
     return a.full_name.localeCompare(b.full_name, 'sv')
   })
 
+  const activeCount = workers.filter(w => w.is_active).length
+
   return (
     <div className="space-y-5 max-w-3xl">
-      <div className="flex items-start justify-between gap-3">
-        <div>
-          <h1 className="text-xl font-semibold">Personal</h1>
-          <p className="text-muted-foreground text-sm">Hantera roller och behörigheter för ditt team</p>
-        </div>
-      </div>
+      <PageHeader
+        title="Personal"
+        subtitle={loading ? 'Laddar…' : `${activeCount} aktiva · ${workers.length - activeCount} inaktiva`}
+        actions={
+          !adding && (
+            <button onClick={() => setAdding(true)} className="btn btn-primary btn-sm">
+              <Plus />
+              Lägg till anställd
+            </button>
+          )
+        }
+      />
 
-      {/* Add employee form */}
-      <AddWorkerForm onAdded={handleAdded} />
+      <AddWorkerForm open={adding} onClose={() => setAdding(false)} onAdded={w => setWorkers(prev => [...prev, w])} />
 
-      {/* Role delegation guide */}
       <RoleDelegationGuide />
-
-      {/* Role legend */}
-      <div className="flex gap-4 flex-wrap">
-        {(Object.keys(ROLE_CONFIG) as UserRole[]).map(role => (
-          <div key={role} className="flex items-center gap-1.5 text-xs">
-            <div className={`h-1.5 w-1.5 rounded-full ${ROLE_CONFIG[role].dotClass}`} />
-            <span className={ROLE_CONFIG[role].textClass}>{ROLE_CONFIG[role].label}</span>
-            <span className="text-muted-foreground">— {ROLE_PERMISSIONS[role].length} behörigheter</span>
-          </div>
-        ))}
-      </div>
 
       {loading ? (
         <div className="flex items-center gap-2 text-muted-foreground py-8">
@@ -445,34 +394,46 @@ export default function WorkersPage() {
           <span className="text-sm">Laddar personal…</span>
         </div>
       ) : error ? (
-        <p className="text-sm text-destructive bg-destructive/10 px-4 py-3 rounded border border-destructive/20">{error}</p>
+        <p className="text-sm text-destructive bg-destructive/12 px-4 py-3 rounded-md border border-destructive/30">{error}</p>
       ) : sorted.length === 0 ? (
-        <div className="rounded border border-border bg-card px-5 py-14 text-center">
-          <p className="text-sm text-muted-foreground">Ingen personal hittades</p>
+        <div className="card empty">
+          <Users />
+          <p className="empty-title">Ingen personal hittades</p>
         </div>
       ) : (
-        <div className="rounded border border-border bg-card overflow-hidden">
-          <div className="flex items-center gap-3 px-5 py-2.5 border-b border-border">
+        <div className="card overflow-hidden">
+          <div className="flex items-center gap-3 px-4 py-2.5 border-b border-border">
             <div className="w-8 shrink-0" />
             <span className="label-caps flex-1">Namn</span>
             <span className="label-caps hidden sm:block w-28 shrink-0">Telefon</span>
-            <span className="label-caps w-28 shrink-0 text-right mr-7">Roll</span>
+            <span className="label-caps w-32 shrink-0 text-right">Roll</span>
+            <span className="w-8 shrink-0" />
           </div>
           <ul>
             {sorted.map(w => (
               <WorkerRow
                 key={w.id}
                 worker={w}
-                onRoleChange={handleRoleChange}
-                onToggleActive={handleToggleActive}
+                locked={w.id === myId}
+                onRoleChange={(id, role) => setWorkers(prev => prev.map(x => x.id === id ? { ...x, role } : x))}
+                onToggleActive={(id, active) => setWorkers(prev => prev.map(x => x.id === id ? { ...x, is_active: active } : x))}
               />
             ))}
           </ul>
         </div>
       )}
 
+      <div className="flex flex-wrap items-center gap-x-4 gap-y-2">
+        {(Object.keys(ROLE_CONFIG) as UserRole[]).map(role => (
+          <div key={role} className="flex items-center gap-2 text-xs text-muted-foreground">
+            <RoleBadge role={role} className="badge-sm" />
+            <span>{ROLE_PERMISSIONS[role].length} behörigheter</span>
+          </div>
+        ))}
+      </div>
+
       <p className="text-xs text-muted-foreground">
-        Klicka på en rad för att se behörigheter. Ändra roll direkt i listan — administratörens roll kan inte ändras härifrån.
+        Klicka på en rad för att se behörigheter. Ändra roll direkt i listan. Ditt eget konto kan inte ändras härifrån, och den sista aktiva administratören kan inte tas bort.
       </p>
     </div>
   )

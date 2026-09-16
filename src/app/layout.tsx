@@ -16,8 +16,11 @@ const dmMono = DM_Mono({
 })
 
 export const metadata: Metadata = {
-  title: 'RenGör — Biltvätt Portal',
-  description: 'Arbetsportal och bokningssystem för biltvättsoperationer',
+  title: {
+    default: 'KOM-fort Bilvård — Portal',
+    template: '%s · KOM-fort Bilvård',
+  },
+  description: 'Arbetsportal och bokningssystem för KOM-fort Bilvård',
 }
 
 // Utan denna renderar mobilen sidan som 980px bred och zoomar ut allt —

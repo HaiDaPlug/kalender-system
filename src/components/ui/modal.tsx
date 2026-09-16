@@ -56,20 +56,23 @@ export function Modal({ open, onClose, children, maxWidth = 'max-w-lg' }: ModalP
 
   return (
     <div
-      className="fixed inset-0 z-50 flex items-center justify-center p-2 sm:p-4"
+      className="fixed inset-0 z-50 flex items-center justify-center p-4"
       style={{
-        backgroundColor: `rgba(0,0,0,${visible ? 0.5 : 0})`,
-        backdropFilter: 'blur(4px)',
+        backgroundColor: `rgba(0,0,0,${visible ? 0.6 : 0})`,
+        backdropFilter: 'blur(6px)',
         transition: 'background-color 180ms ease',
       }}
       onClick={e => { if (e.target === e.currentTarget) onClose() }}
     >
       <div
-        className={`w-full ${maxWidth} bg-card border border-border rounded-lg shadow-2xl flex flex-col max-h-[92dvh] sm:max-h-[90vh]`}
+        role="dialog"
+        aria-modal="true"
+        className={`w-full ${maxWidth} bg-card border border-border-strong rounded-xl flex flex-col max-h-[90vh]`}
         style={{
           opacity: visible ? 1 : 0,
           transform: visible ? 'translateY(0) scale(1)' : 'translateY(6px) scale(0.98)',
           transition: 'opacity 180ms ease, transform 180ms ease',
+          boxShadow: 'var(--shadow-modal)',
         }}
         onClick={e => e.stopPropagation()}
       >
@@ -79,9 +82,7 @@ export function Modal({ open, onClose, children, maxWidth = 'max-w-lg' }: ModalP
   )
 }
 
-// På mobil täcker panelen nästan hela skärmen men lämnar en remsa till vänster
-// så att man kan trycka utanför för att stänga. På desktop behålls w-80.
-export function SidePanel({ open, onClose, children, width = 'w-[85%] max-w-sm sm:w-80' }: SidePanelProps) {
+export function SidePanel({ open, onClose, children, width = 'w-80' }: SidePanelProps) {
   useEscapeKey(open, onClose)
   const { mounted, visible } = useDelayedUnmount(open, 200)
 
@@ -98,11 +99,13 @@ export function SidePanel({ open, onClose, children, width = 'w-[85%] max-w-sm s
         onClick={onClose}
       />
       <div
-        className={`absolute right-0 top-0 bottom-0 ${width} z-40 bg-card border-l border-border flex flex-col shadow-2xl`}
+        role="dialog"
+        className={`absolute right-0 top-0 bottom-0 ${width} z-40 bg-card border-l border-border-strong flex flex-col`}
         style={{
           transform: visible ? 'translateX(0)' : 'translateX(100%)',
           opacity: visible ? 1 : 0,
           transition: 'transform 220ms cubic-bezier(0.4,0,0.2,1), opacity 200ms ease',
+          boxShadow: 'var(--shadow-modal)',
         }}
       >
         {children}

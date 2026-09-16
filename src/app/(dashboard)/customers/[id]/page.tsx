@@ -5,56 +5,52 @@ import { useParams, useRouter } from 'next/navigation'
 import {
   ArrowLeft, Phone, Mail, Car,
   MessageSquare, Loader2, Save, CheckCircle2,
-  Clock, TrendingUp, Hash
+  Clock, TrendingUp, Inbox, MessageCircle,
 } from 'lucide-react'
 import Link from 'next/link'
 import { toast } from 'sonner'
-import type { Booking, SmsLog, Customer } from '@/types'
-
-const STATUS_LABEL: Record<string, { label: string; className: string }> = {
-  pending:     { label: 'Väntar',    className: 'text-status-pending bg-status-pending/10' },
-  confirmed:   { label: 'Bekräftad', className: 'text-status-confirmed bg-status-confirmed/10' },
-  in_progress: { label: 'Pågår',     className: 'text-status-in-progress bg-status-in-progress/10' },
-  completed:   { label: 'Klar',      className: 'text-status-completed bg-status-completed/10' },
-  cancelled:   { label: 'Avbokad',   className: 'text-status-cancelled bg-status-cancelled/10' },
-}
+import type { Booking, SmsLog, Customer, UserRole } from '@/types'
+import { BUSINESS_TZ } from '@/lib/time'
+import { cn } from '@/lib/utils/cn'
+import { PageHeader } from '@/components/ui/page-header'
+import { StatusBadge } from '@/components/ui/status-badge'
 
 const SMS_TYPE_LABEL: Record<string, string> = {
-  confirmation:    'Orderbekräftelse',
+  confirmation:     'Bokningsbekräftelse',
   ready_for_pickup: 'Redo för upphämtning',
-  manual:          'Manuellt',
+  manual:           'Manuellt',
 }
 
 function formatDate(iso: string): string {
-  return new Date(iso).toLocaleDateString('sv-SE', {
-    day: 'numeric', month: 'short', year: 'numeric',
-  })
+  return new Date(iso).toLocaleDateString('sv-SE', { day: 'numeric', month: 'short', year: 'numeric', timeZone: BUSINESS_TZ })
 }
 
 function formatDateTime(iso: string): string {
-  return new Date(iso).toLocaleDateString('sv-SE', {
-    weekday: 'short', day: 'numeric', month: 'short',
-    hour: '2-digit', minute: '2-digit',
+  return new Date(iso).toLocaleString('sv-SE', {
+    weekday: 'short', day: 'numeric', month: 'short', hour: '2-digit', minute: '2-digit', timeZone: BUSINESS_TZ,
   })
 }
 
 export default function CustomerHistoryPage() {
-  const { id }  = useParams<{ id: string }>()
-  const router  = useRouter()
+  const { id } = useParams<{ id: string }>()
+  const router = useRouter()
 
   const [customer, setCustomer]   = useState<Customer | null>(null)
   const [bookings, setBookings]   = useState<Booking[]>([])
   const [smsLogs, setSmsLogs]     = useState<SmsLog[]>([])
+  const [myRole, setMyRole]       = useState<UserRole | null>(null)
   const [loading, setLoading]     = useState(true)
   const [saving, setSaving]       = useState(false)
   const [saved, setSaved]         = useState(false)
   const [notes, setNotes]         = useState('')
   const [activeTab, setActiveTab] = useState<'historik' | 'sms'>('historik')
 
+  const canEditNotes = myRole === 'admin' || myRole === 'manager'
+
   const fetchData = useCallback(async () => {
-    setLoading(true)
-    const res  = await fetch(`/api/customers/${id}`)
-    const data = await res.json()
+    const [res, meRes] = await Promise.all([fetch(`/api/customers/${id}`), fetch('/api/me')])
+    if (meRes.ok) setMyRole(((await meRes.json()) as { role: UserRole }).role)
+    const data = await res.json().catch(() => ({}))
     if (!res.ok) {
       toast.error('Kunde inte hämta kund', { description: data.error ?? `${res.status} ${res.statusText}` })
       setLoading(false)
@@ -74,26 +70,26 @@ export default function CustomerHistoryPage() {
     const res = await fetch(`/api/customers/${id}`, {
       method: 'PATCH',
       headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ notes }),
+      body: JSON.stringify({ notes: notes.trim() || null }),
     })
     if (!res.ok) {
       const d = await res.json().catch(() => ({}))
-      toast.error('Kunde inte spara anteckningar', {
-        description: d.error ?? `${res.status} ${res.statusText}`,
-      })
+      toast.error('Kunde inte spara anteckningar', { description: d.error ?? `${res.status} ${res.statusText}` })
     } else {
       setSaved(true)
+      setCustomer(prev => prev ? { ...prev, notes: notes.trim() || undefined } : prev)
       toast.success('Anteckningar sparade')
       setTimeout(() => setSaved(false), 2000)
     }
     setSaving(false)
   }
 
-  // Statistik
+  // Stats
   const completedBookings = bookings.filter(b => b.status === 'completed')
   const totalSpent        = completedBookings.reduce((s, b) => s + (b.total_price ?? 0), 0)
   const uniqueCars        = [...new Map(bookings.map(b => [b.car_id, b.car])).values()].filter(Boolean)
   const lastVisit         = completedBookings[0]?.scheduled_at
+  const notesDirty        = (notes.trim() || '') !== (customer?.notes ?? '')
 
   if (loading) {
     return (
@@ -107,220 +103,199 @@ export default function CustomerHistoryPage() {
     return (
       <div className="flex flex-col items-center justify-center h-full gap-3">
         <p className="text-sm text-muted-foreground">Kund hittades inte</p>
-        <button onClick={() => router.back()} className="text-sm text-primary hover:underline">Tillbaka</button>
+        <button onClick={() => router.back()} className="btn btn-secondary btn-sm">
+          <ArrowLeft />
+          Tillbaka
+        </button>
       </div>
     )
   }
 
+  const stats = [
+    { label: 'Besök', value: String(bookings.length) },
+    { label: 'Klara', value: String(completedBookings.length) },
+    { label: 'Bilar', value: String(uniqueCars.length) },
+    { label: 'Totalt', value: totalSpent > 0 ? `${totalSpent.toLocaleString('sv-SE')} kr` : '—' },
+  ]
+
   return (
-    <div className="max-w-2xl mx-auto w-full space-y-4 pb-8">
-      {/* Header */}
-      <div className="flex items-center gap-3">
-        <button
-          onClick={() => router.back()}
-          className="h-8 w-8 flex items-center justify-center rounded hover:bg-secondary text-muted-foreground hover:text-foreground transition-colors"
-        >
-          <ArrowLeft className="h-4 w-4" />
-        </button>
-        <div className="flex-1">
-          <h1 className="text-sm font-semibold">{customer.full_name}</h1>
-          <p className="text-xs text-muted-foreground mt-0.5">Kundprofil</p>
-        </div>
-      </div>
-
-      {/* Kontaktinfo */}
-      <div className="rounded border border-border bg-card p-4 space-y-2">
-        <p className="label-caps">Kontakt</p>
-        <div className="flex flex-wrap gap-4">
-          {customer.phone && (
-            <a href={`tel:${customer.phone}`} className="flex items-center gap-2 text-sm text-primary hover:underline">
-              <Phone className="h-3.5 w-3.5" />
-              {customer.phone}
-            </a>
-          )}
-          {customer.email && (
-            <a href={`mailto:${customer.email}`} className="flex items-center gap-2 text-sm text-muted-foreground hover:text-foreground">
-              <Mail className="h-3.5 w-3.5" />
-              {customer.email}
-            </a>
-          )}
-        </div>
-        <p className="text-xs text-muted-foreground">Kund sedan {formatDate(customer.created_at)}</p>
-      </div>
-
-      {/* Statistik — 4 kort */}
-      <div className="grid grid-cols-4 gap-3">
-        <div className="rounded border border-border bg-card p-3 text-center">
-          <p className="text-2xl font-semibold tabular">{bookings.length}</p>
-          <p className="label-caps mt-1">Besök</p>
-        </div>
-        <div className="rounded border border-border bg-card p-3 text-center">
-          <p className="text-2xl font-semibold tabular">{completedBookings.length}</p>
-          <p className="label-caps mt-1">Klara</p>
-        </div>
-        <div className="rounded border border-border bg-card p-3 text-center">
-          <p className="text-2xl font-semibold tabular">{uniqueCars.length}</p>
-          <p className="label-caps mt-1">Bilar</p>
-        </div>
-        <div className="rounded border border-border bg-card p-3 text-center">
-          <p className="text-lg font-semibold tabular">
-            {totalSpent > 0 ? `${totalSpent.toLocaleString('sv-SE')} kr` : '—'}
-          </p>
-          <p className="label-caps mt-1">Totalt</p>
-        </div>
-      </div>
-
-      {/* Bilar */}
-      {uniqueCars.length > 0 && (
-        <div className="rounded border border-border bg-card p-4 space-y-2">
-          <p className="label-caps">Bilar</p>
-          <div className="space-y-1.5">
-            {uniqueCars.map((car, i) => car && (
-              <div key={i} className="flex items-center gap-3">
-                <Car className="h-3.5 w-3.5 text-muted-foreground shrink-0" />
-                <span className="text-sm">{car.make} {car.model}</span>
-                {car.license_plate && (
-                  <span className="text-sm font-mono tracking-widest text-primary font-semibold ml-auto">
-                    {car.license_plate}
-                  </span>
-                )}
-                {car.color && (
-                  <span className="text-xs text-muted-foreground">{car.color}</span>
-                )}
-              </div>
-            ))}
-          </div>
-        </div>
-      )}
-
-      {/* Senaste besök */}
-      {lastVisit && (
-        <div className="flex items-center gap-2 px-4 py-2.5 rounded border border-border bg-card">
-          <TrendingUp className="h-3.5 w-3.5 text-status-completed shrink-0" />
-          <span className="text-sm text-muted-foreground">Senaste besök:</span>
-          <span className="text-sm font-medium">{formatDate(lastVisit)}</span>
-        </div>
-      )}
-
-      {/* Anteckningar om kunden */}
-      <div className="rounded border border-border bg-card p-4 space-y-3">
-        <p className="label-caps flex items-center gap-1.5">
-          <MessageSquare className="h-3 w-3" />
-          Anteckningar om kunden
-        </p>
-        <textarea
-          value={notes}
-          onChange={e => setNotes(e.target.value)}
-          rows={3}
-          placeholder="T.ex. föredrar SMS-kontakt, allergisk mot vissa produkter, VIP-kund…"
-          className="w-full px-3 py-2 text-sm rounded border border-border bg-secondary focus:outline-none focus:ring-1 focus:ring-primary placeholder:text-muted-foreground resize-none"
-        />
-        <button
-          onClick={handleSaveNotes}
-          disabled={saving}
-          className="flex items-center gap-2 px-4 py-2 text-sm rounded bg-primary text-primary-foreground hover:opacity-90 disabled:opacity-50 transition-opacity font-medium"
-        >
-          {saving ? <Loader2 className="h-3.5 w-3.5 animate-spin" /> : saved ? <CheckCircle2 className="h-3.5 w-3.5" /> : <Save className="h-3.5 w-3.5" />}
-          {saved ? 'Sparat!' : 'Spara'}
-        </button>
-      </div>
-
-      {/* Flikar: Historik / SMS */}
-      <div className="flex border-b border-border">
-        {(['historik', 'sms'] as const).map(tab => (
-          <button
-            key={tab}
-            onClick={() => setActiveTab(tab)}
-            className={`px-4 py-2.5 text-sm font-medium transition-colors capitalize ${
-              activeTab === tab
-                ? 'text-foreground border-b-2 border-primary'
-                : 'text-muted-foreground hover:text-foreground'
-            }`}
-          >
-            {tab === 'historik' ? `Bokningshistorik (${bookings.length})` : `SMS (${smsLogs.length})`}
+    <div className="max-w-3xl mx-auto w-full space-y-4 pb-10">
+      <PageHeader
+        leading={
+          <button onClick={() => router.back()} aria-label="Tillbaka" className="btn btn-ghost btn-icon btn-sm mt-0.5">
+            <ArrowLeft />
           </button>
+        }
+        title={customer.full_name}
+        subtitle={`Kund sedan ${formatDate(customer.created_at)}`}
+        actions={
+          <div className="flex items-center gap-2">
+            {customer.phone && (
+              <a href={`tel:${customer.phone}`} className="btn btn-secondary btn-sm">
+                <Phone />
+                <span className="tabular">{customer.phone}</span>
+              </a>
+            )}
+            {customer.email && (
+              <a href={`mailto:${customer.email}`} className="btn btn-ghost btn-sm hidden sm:inline-flex">
+                <Mail />
+                {customer.email}
+              </a>
+            )}
+          </div>
+        }
+      />
+
+      {/* Stats */}
+      <div className="grid grid-cols-2 sm:grid-cols-4 gap-3">
+        {stats.map(s => (
+          <div key={s.label} className="card p-4">
+            <p className="label-caps">{s.label}</p>
+            <p className="text-2xl font-light tabular mt-1.5 tracking-tight">{s.value}</p>
+          </div>
         ))}
       </div>
 
-      {/* Bokningshistorik */}
+      <div className="grid sm:grid-cols-2 gap-3">
+        {/* Cars */}
+        <div className="card p-4 space-y-3">
+          <p className="label-caps">Bilar</p>
+          {uniqueCars.length === 0 ? (
+            <p className="text-sm text-muted-foreground italic">Inga bilar registrerade</p>
+          ) : (
+            <div className="space-y-2">
+              {uniqueCars.map((car, i) => car && (
+                <div key={i} className="flex items-center gap-3">
+                  <Car className="h-3.5 w-3.5 text-muted-foreground shrink-0" />
+                  <span className="text-sm flex-1 min-w-0 truncate">{car.make} {car.model}{car.color ? <span className="text-muted-foreground"> · {car.color}</span> : null}</span>
+                  {car.license_plate && <span className="plate text-sm text-primary shrink-0">{car.license_plate}</span>}
+                </div>
+              ))}
+            </div>
+          )}
+          {lastVisit && (
+            <div className="flex items-center gap-2 pt-2 border-t border-border text-sm">
+              <TrendingUp className="h-3.5 w-3.5 text-status-completed shrink-0" />
+              <span className="text-muted-foreground">Senaste besök</span>
+              <span className="font-medium ml-auto">{formatDate(lastVisit)}</span>
+            </div>
+          )}
+        </div>
+
+        {/* Notes */}
+        <div className="card p-4 space-y-3">
+          <p className="label-caps flex items-center gap-1.5">
+            <MessageSquare className="h-3 w-3" />
+            Anteckningar om kunden
+          </p>
+          <textarea
+            value={notes}
+            onChange={e => setNotes(e.target.value)}
+            rows={3}
+            disabled={!canEditNotes}
+            placeholder={canEditNotes ? 'T.ex. föredrar SMS-kontakt, VIP-kund…' : 'Inga anteckningar'}
+            className="field"
+          />
+          {canEditNotes && (
+            <div className="flex justify-end">
+              <button onClick={handleSaveNotes} disabled={saving || (!notesDirty && !saved)} className="btn btn-primary btn-sm">
+                {saving ? <Loader2 className="animate-spin" /> : saved ? <CheckCircle2 /> : <Save />}
+                {saved ? 'Sparat' : 'Spara'}
+              </button>
+            </div>
+          )}
+        </div>
+      </div>
+
+      {/* Tabs */}
+      <div className="segmented">
+        <button data-active={activeTab === 'historik'} onClick={() => setActiveTab('historik')}>
+          Bokningar <span className="tabular opacity-70">({bookings.length})</span>
+        </button>
+        <button data-active={activeTab === 'sms'} onClick={() => setActiveTab('sms')}>
+          SMS <span className="tabular opacity-70">({smsLogs.length})</span>
+        </button>
+      </div>
+
       {activeTab === 'historik' && (
         <div className="space-y-2">
           {bookings.length === 0 && (
-            <p className="text-sm text-muted-foreground py-4 text-center">Inga bokningar ännu.</p>
+            <div className="card empty">
+              <Inbox />
+              <p className="empty-title">Inga bokningar ännu</p>
+            </div>
           )}
-          {bookings.map(b => {
-            const st = STATUS_LABEL[b.status]
-            return (
-              <Link
-                key={b.id}
-                href={`/bookings/${b.id}`}
-                className="flex items-start gap-3 rounded border border-border bg-card px-4 py-3 hover:bg-secondary/50 transition-colors"
-              >
-                <div className="flex-1 min-w-0">
-                  <div className="flex items-center gap-2">
-                    <p className="text-sm font-medium">{b.service_type}</p>
-                    {b.total_price && (
-                      <span className="text-xs text-muted-foreground ml-auto">{b.total_price.toLocaleString('sv-SE')} kr</span>
-                    )}
-                  </div>
-                  <div className="flex items-center gap-3 mt-1">
-                    <span className="flex items-center gap-1 text-xs text-muted-foreground">
-                      <Clock className="h-3 w-3" />
-                      {formatDateTime(b.scheduled_at)}
-                    </span>
-                    {b.car && (
-                      <span className="flex items-center gap-1 text-xs text-muted-foreground">
-                        <Hash className="h-3 w-3" />
-                        {b.car.license_plate ?? `${b.car.make} ${b.car.model}`}
-                      </span>
-                    )}
-                  </div>
-                  {b.customer_notes && (
-                    <p className="text-xs mt-1.5 px-2 py-1 rounded bg-primary/10 text-primary border border-primary/20 truncate">
-                      {b.customer_notes}
-                    </p>
+          {bookings.map(b => (
+            <Link
+              key={b.id}
+              href={`/bookings/${b.id}`}
+              className="card flex items-start gap-3 px-4 py-3 hover:border-border-strong hover:bg-secondary/30 transition-colors"
+            >
+              <div className="flex-1 min-w-0">
+                <div className="flex items-center gap-2">
+                  <p className="text-sm font-medium">{b.service_type}</p>
+                  {b.total_price != null && (
+                    <span className="text-xs text-muted-foreground ml-auto tabular">{b.total_price.toLocaleString('sv-SE')} kr</span>
                   )}
                 </div>
-                <span
-                  className={`text-xs font-medium px-2 py-0.5 rounded shrink-0 mt-0.5 ${st?.className ?? ''}`}
-                >
-                  {st?.label}
-                </span>
-              </Link>
-            )
-          })}
+                <div className="flex items-center gap-3 mt-1 flex-wrap">
+                  <span className="flex items-center gap-1 text-xs text-muted-foreground tabular">
+                    <Clock className="h-3 w-3" />
+                    {formatDateTime(b.scheduled_at)}
+                  </span>
+                  {b.car && (
+                    <span className="flex items-center gap-1 text-xs text-muted-foreground">
+                      <Car className="h-3 w-3" />
+                      {b.car.license_plate ? <span className="plate">{b.car.license_plate}</span> : `${b.car.make} ${b.car.model}`}
+                    </span>
+                  )}
+                </div>
+                {b.customer_notes && (
+                  <p className="text-xs mt-2 px-2.5 py-1.5 rounded-md bg-primary/10 text-primary border border-primary/25 truncate">
+                    {b.customer_notes}
+                  </p>
+                )}
+              </div>
+              <StatusBadge status={b.status} size="sm" className="shrink-0 mt-0.5" />
+            </Link>
+          ))}
         </div>
       )}
 
-      {/* SMS-historik */}
       {activeTab === 'sms' && (
         <div className="space-y-2">
           {smsLogs.length === 0 && (
-            <p className="text-sm text-muted-foreground py-4 text-center">Inga SMS skickade ännu.</p>
+            <div className="card empty">
+              <MessageCircle />
+              <p className="empty-title">Inga SMS skickade ännu</p>
+              {!canEditNotes && <p className="empty-text">SMS-historik visas endast för administratörer.</p>}
+            </div>
           )}
-          {smsLogs.map(sms => (
-            <div key={sms.id} className="rounded border border-border bg-card px-4 py-3 space-y-1.5">
-              <div className="flex items-center justify-between gap-2">
-                <span className="text-xs font-medium text-muted-foreground">
-                  {SMS_TYPE_LABEL[sms.sms_type] ?? sms.sms_type}
-                </span>
-                <div className="flex items-center gap-1.5">
-                  <div
-                    className={`h-1.5 w-1.5 rounded-full ${
-                      sms.status === 'sent' || sms.status === 'delivered'
-                        ? 'bg-status-completed'
-                        : 'bg-status-cancelled'
-                    }`}
-                  />
-                  <span className="text-xs text-muted-foreground">
-                    {sms.sent_at ? formatDateTime(sms.sent_at) : formatDateTime(sms.created_at)}
+          {smsLogs.map(sms => {
+            const ok = sms.status === 'sent' || sms.status === 'delivered'
+            return (
+              <div key={sms.id} className="card px-4 py-3 space-y-2">
+                <div className="flex items-center justify-between gap-2">
+                  <span className="text-xs font-semibold text-muted-foreground">
+                    {SMS_TYPE_LABEL[sms.sms_type] ?? sms.sms_type}
                   </span>
+                  <div className="flex items-center gap-2">
+                    <span className={cn('badge badge-sm badge-status')} style={{ '--badge-color': ok ? 'var(--status-completed)' : sms.status === 'pending' ? 'var(--status-pending)' : 'var(--status-cancelled)' } as React.CSSProperties}>
+                      {ok ? 'Skickat' : sms.status === 'pending' ? 'Väntar' : sms.status === 'unknown' ? 'Okänt' : 'Misslyckades'}
+                    </span>
+                    <span className="text-xs text-muted-foreground tabular">
+                      {formatDateTime(sms.sent_at ?? sms.created_at)}
+                    </span>
+                  </div>
+                </div>
+                <p className="text-sm leading-relaxed">{sms.message_body}</p>
+                <div className="flex items-center justify-between gap-2">
+                  <p className="text-xs text-muted-foreground tabular">{sms.phone_number}</p>
+                  {sms.error_message && <p className="text-xs text-destructive truncate">{sms.error_message}</p>}
                 </div>
               </div>
-              <p className="text-sm leading-relaxed">{sms.message_body}</p>
-              <p className="text-xs text-muted-foreground tabular">{sms.phone_number}</p>
-            </div>
-          ))}
+            )
+          })}
         </div>
       )}
     </div>

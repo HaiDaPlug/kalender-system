@@ -1,23 +1,36 @@
 import { NextRequest, NextResponse } from 'next/server'
-import { createRawClient } from '@/lib/supabase/server-raw'
+import { requireApiUser, isReviewer } from '@/lib/auth/session'
+import { createServiceClient } from '@/lib/supabase/service'
+import { jsonError, readJsonObject, isIsoDate, isNonEmptyString } from '@/lib/api'
 
 /*
-  GET  /api/shifts  — hämta pass (filtrera på worker_id, status, from, to)
-  POST /api/shifts  — anställd skapar ett nytt pass (status sätts till 'pending')
+  GET  /api/shifts?worker_id=&status=&from=&to=  — list shifts (all staff can read)
+  POST /api/shifts { startsAt, endsAt, notes?, workerId? }
+       Staff submit a shift for themselves (status pending). Admin/manager may
+       pass workerId to register a shift on someone else's behalf.
 */
 
-export async function GET(request: NextRequest) {
-  const supabase = await createRawClient()
-  const { searchParams } = new URL(request.url)
+const SHIFT_SELECT = '*, worker:profiles!shifts_worker_id_fkey(*), reviewed_by_profile:profiles!shifts_reviewed_by_fkey(*)'
+const MAX_SHIFT_HOURS = 24
 
+export async function GET(request: NextRequest) {
+  const auth = await requireApiUser()
+  if (!auth.ok) return auth.response
+  const { supabase } = auth
+
+  const { searchParams } = request.nextUrl
   const workerId = searchParams.get('worker_id')
   const status   = searchParams.get('status')
   const from     = searchParams.get('from')
   const to       = searchParams.get('to')
 
+  if (status && !['pending', 'approved', 'rejected'].includes(status)) return jsonError('Ogiltig status', 400)
+  if (from && !isIsoDate(from)) return jsonError('Ogiltigt from-datum', 400)
+  if (to && !isIsoDate(to))     return jsonError('Ogiltigt to-datum', 400)
+
   let query = supabase
     .from('shifts')
-    .select('*, worker:profiles!shifts_worker_id_fkey(*), reviewed_by_profile:profiles!shifts_reviewed_by_fkey(*)')
+    .select(SHIFT_SELECT)
     .order('starts_at', { ascending: true })
 
   if (workerId) query = query.eq('worker_id', workerId)
@@ -26,38 +39,52 @@ export async function GET(request: NextRequest) {
   if (to)       query = query.lte('starts_at', to)
 
   const { data, error } = await query
-  if (error) return NextResponse.json({ error: error.message }, { status: 500 })
+  if (error) return jsonError(error.message, 500)
 
   return NextResponse.json(data)
 }
 
 export async function POST(request: NextRequest) {
-  const supabase = await createRawClient()
-  const body = await request.json()
+  const auth = await requireApiUser()
+  if (!auth.ok) return auth.response
+  const { profile } = auth
 
-  const { workerId, startsAt, endsAt, notes } = body
+  const body = await readJsonObject(request)
+  if (!body) return jsonError('Ogiltig JSON', 400)
 
-  if (!workerId || !startsAt || !endsAt) {
-    return NextResponse.json({ error: 'workerId, startsAt och endsAt krävs' }, { status: 400 })
+  const { startsAt, endsAt, notes, workerId } = body
+
+  if (!isIsoDate(startsAt) || !isIsoDate(endsAt)) return jsonError('startsAt och endsAt måste vara giltiga tidpunkter', 400)
+  if (notes !== undefined && notes !== null && typeof notes !== 'string') return jsonError('Ogiltig kommentar', 400)
+
+  const start = new Date(startsAt)
+  const end   = new Date(endsAt)
+  if (end <= start) return jsonError('Slutet måste vara efter starten', 400)
+  if (end.getTime() - start.getTime() > MAX_SHIFT_HOURS * 3600_000) {
+    return jsonError(`Ett pass kan vara högst ${MAX_SHIFT_HOURS} timmar`, 400)
   }
 
-  if (new Date(endsAt) <= new Date(startsAt)) {
-    return NextResponse.json({ error: 'Slutet måste vara efter starten' }, { status: 400 })
+  // Only reviewers may create a shift for someone else.
+  let targetWorkerId = profile.id
+  if (isNonEmptyString(workerId) && workerId !== profile.id) {
+    if (!isReviewer(profile.role)) return jsonError('Du kan bara lägga in pass för dig själv', 403)
+    targetWorkerId = workerId
   }
 
-  const { data, error } = await supabase
+  const service = createServiceClient()
+  const { data, error } = await service
     .from('shifts')
     .insert({
-      worker_id: workerId,
-      starts_at: startsAt,
-      ends_at:   endsAt,
-      notes:     notes ?? null,
+      worker_id: targetWorkerId,
+      starts_at: start.toISOString(),
+      ends_at:   end.toISOString(),
+      notes:     isNonEmptyString(notes) ? notes.trim() : null,
       status:    'pending',
     })
-    .select('*, worker:profiles!shifts_worker_id_fkey(*)')
+    .select(SHIFT_SELECT)
     .single()
 
-  if (error) return NextResponse.json({ error: error.message }, { status: 400 })
+  if (error) return jsonError(error.message, 400)
 
   return NextResponse.json(data, { status: 201 })
 }

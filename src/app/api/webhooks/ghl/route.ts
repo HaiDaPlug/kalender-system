@@ -1,5 +1,6 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { createServiceClient } from '@/lib/supabase/service'
+import type { Json } from '@/types/database'
 import {
   parseWebhookPayload,
   isAppointmentEvent,
@@ -131,7 +132,7 @@ export async function POST(request: NextRequest) {
       entity_id: entityId,
       highlevel_id: idempotencyKey,
       action: 'webhook_received',
-      payload: payload as Record<string, unknown>,
+      payload: payload as unknown as Json,
       success: false,
     })
     .select('id')

@@ -1,49 +1,54 @@
 import { NextRequest, NextResponse } from 'next/server'
-import { createRawClient } from '@/lib/supabase/server-raw'
+import { requireApiUser, REVIEWER_ROLES } from '@/lib/auth/session'
+import { createServiceClient } from '@/lib/supabase/service'
+import { jsonError, readJsonObject, isNonEmptyString } from '@/lib/api'
 
 /*
-  POST /api/shifts/approve
-  Admin/manager godkänner eller avvisar ett pass.
-  Body: { shiftId, action: 'approved' | 'rejected', reviewerId }
+  POST /api/shifts/approve   { shiftId, action: 'approved' | 'rejected' }
+  Admin/manager approves or rejects a pending shift. The reviewer is always the
+  signed-in user — the request body cannot choose who approved.
 */
 export async function POST(request: NextRequest) {
-  const supabase = await createRawClient()
-  const body = await request.json()
+  const auth = await requireApiUser(REVIEWER_ROLES)
+  if (!auth.ok) return auth.response
+  const { profile } = auth
 
-  const { shiftId, action, reviewerId } = body
+  const body = await readJsonObject(request)
+  if (!body) return jsonError('Ogiltig JSON', 400)
 
-  if (!shiftId || !action || !reviewerId) {
-    return NextResponse.json({ error: 'shiftId, action och reviewerId krävs' }, { status: 400 })
+  const { shiftId, action } = body
+  if (!isNonEmptyString(shiftId) || (action !== 'approved' && action !== 'rejected')) {
+    return jsonError('shiftId och action (approved/rejected) krävs', 400)
   }
 
-  if (!['approved', 'rejected'].includes(action)) {
-    return NextResponse.json({ error: 'action måste vara approved eller rejected' }, { status: 400 })
-  }
+  const service = createServiceClient()
 
-  // Verifiera att reviewern är admin eller manager
-  const { data: reviewer } = await supabase
-    .from('profiles')
-    .select('role')
-    .eq('id', reviewerId)
-    .single()
+  const { data: shift, error: fetchError } = await service
+    .from('shifts')
+    .select('id, status')
+    .eq('id', shiftId)
+    .maybeSingle()
 
-  if (!reviewer || !['admin', 'manager'].includes(reviewer.role)) {
-    return NextResponse.json({ error: 'Endast admin eller manager kan godkänna pass' }, { status: 403 })
-  }
+  if (fetchError) return jsonError(fetchError.message, 500)
+  if (!shift)     return jsonError('Passet hittades inte', 404)
+  if (shift.status !== 'pending') return jsonError('Passet väntar inte på godkännande', 409)
 
-  const { data, error } = await supabase
+  const now = new Date().toISOString()
+  const { data, error } = await service
     .from('shifts')
     .update({
       status:      action,
-      reviewed_by: reviewerId,
-      reviewed_at: new Date().toISOString(),
-      updated_at:  new Date().toISOString(),
+      reviewed_by: profile.id,
+      reviewed_at: now,
+      updated_at:  now,
     })
     .eq('id', shiftId)
+    .eq('status', 'pending')
     .select('*, worker:profiles!shifts_worker_id_fkey(*)')
-    .single()
+    .maybeSingle()
 
-  if (error) return NextResponse.json({ error: error.message }, { status: 500 })
+  if (error) return jsonError(error.message, 500)
+  if (!data)  return jsonError('Passet har redan hanterats', 409)
 
   return NextResponse.json(data)
 }

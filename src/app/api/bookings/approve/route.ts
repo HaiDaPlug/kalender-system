@@ -1,251 +1,122 @@
 import { NextRequest, NextResponse } from 'next/server'
-import { createClient } from '@/lib/supabase/server'
+import { requireApiUser, REVIEWER_ROLES } from '@/lib/auth/session'
 import { createServiceClient } from '@/lib/supabase/service'
 import { sendBookingApproved, sendBookingRejected } from '@/lib/email/resend'
-import { sendBookingConfirmedSms } from '@/lib/sms/46elks'
+import { sendConfirmationSms } from '@/lib/sms/confirmation'
+import { jsonError, readJsonObject, isNonEmptyString } from '@/lib/api'
 
-// POST /api/bookings/approve
-// Admin approves or rejects a pending booking.
-// On approve: status → 'confirmed', email sent to the worker who submitted it.
-// On reject:  status → 'cancelled', email sent with optional reason.
+/*
+  POST /api/bookings/approve   { bookingId, action: 'approved' | 'rejected', reason? }
+  Admin/manager approves or rejects a *pending* booking.
+
+  approve: status → confirmed, SMS to customer. If the SMS fails the booking is
+           reverted to pending (and the worker is NOT emailed "approved").
+  reject:  status → cancelled, email to the submitting worker with optional reason.
+*/
+
+interface BookingForApproval {
+  id: string
+  status: string
+  customer_id: string
+  service_type: string
+  scheduled_at: string
+  customer: { full_name: string; phone: string | null } | null
+  car: { make: string; model: string; license_plate: string | null } | null
+  creator: { full_name: string; email: string } | null
+}
+
 export async function POST(request: NextRequest) {
-  const sessionClient = await createClient()
-  const { data: { user } } = await sessionClient.auth.getUser()
+  const auth = await requireApiUser(REVIEWER_ROLES)
+  if (!auth.ok) return auth.response
 
-  const isDev = process.env.NODE_ENV === 'development'
-  if (!user && !isDev) {
-    return NextResponse.json({ error: 'Unauthorized' }, { status: 401 })
+  const body = await readJsonObject(request)
+  if (!body) return jsonError('Ogiltig JSON', 400)
+
+  const { bookingId, action, reason } = body
+  if (!isNonEmptyString(bookingId) || (action !== 'approved' && action !== 'rejected')) {
+    return jsonError('bookingId och action (approved/rejected) krävs', 400)
   }
-
-  if (user) {
-    const { data: actor } = await sessionClient
-      .from('profiles')
-      .select('role')
-      .eq('id', user.id)
-      .single()
-    if (!['admin', 'manager'].includes((actor as { role: string } | null)?.role ?? '')) {
-      return NextResponse.json({ error: 'Forbidden' }, { status: 403 })
-    }
-  }
-
-  const body = await request.json() as {
-    bookingId: string
-    action: 'approved' | 'rejected'
-    reason?: string
-  }
-
-  if (!body.bookingId || !['approved', 'rejected'].includes(body.action)) {
-    return NextResponse.json({ error: 'bookingId and action required' }, { status: 400 })
+  if (reason !== undefined && reason !== null && typeof reason !== 'string') {
+    return jsonError('Ogiltig anledning', 400)
   }
 
   const service = createServiceClient()
 
-  // Fetch the booking + creator profile for the email
-  // eslint-disable-next-line @typescript-eslint/no-explicit-any
-  const { data: booking, error: fetchError } = await (service as any)
+  const { data: raw, error: fetchError } = await service
     .from('bookings')
-    .select('*, customer:customers(*), car:cars(*), creator:profiles!bookings_created_by_fkey(*)')
-    .eq('id', body.bookingId)
-    .single()
+    .select('id, status, customer_id, service_type, scheduled_at, customer:customers(full_name, phone), car:cars(make, model, license_plate), creator:profiles!bookings_created_by_fkey(full_name, email)')
+    .eq('id', bookingId)
+    .maybeSingle()
 
-  if (fetchError || !booking) {
-    return NextResponse.json({ error: 'Booking not found' }, { status: 404 })
+  if (fetchError) return jsonError(fetchError.message, 500)
+  if (!raw)       return jsonError('Bokningen hittades inte', 404)
+
+  const booking = raw as unknown as BookingForApproval
+
+  if (booking.status !== 'pending') {
+    return jsonError('Bokningen väntar inte på godkännande', 409)
   }
 
-  const newStatus = body.action === 'approved' ? 'confirmed' : 'cancelled'
+  const newStatus = action === 'approved' ? 'confirmed' : 'cancelled'
 
-  // eslint-disable-next-line @typescript-eslint/no-explicit-any
-  const { error: updateError } = await (service as any)
+  const { error: updateError } = await service
     .from('bookings')
     .update({ status: newStatus, updated_at: new Date().toISOString() })
-    .eq('id', body.bookingId)
+    .eq('id', bookingId)
+    .eq('status', 'pending') // guard against a concurrent approve/reject
 
-  if (updateError) {
-    return NextResponse.json({ error: updateError.message }, { status: 500 })
+  if (updateError) return jsonError(updateError.message, 500)
+
+  // Confirmation SMS to the customer on approval
+  let smsSent = false
+  let smsError: string | null = null
+  let finalStatus: string = newStatus
+
+  if (action === 'approved') {
+    const sms = await sendConfirmationSms(service, {
+      bookingId:    booking.id,
+      customerId:   booking.customer_id,
+      phone:        booking.customer?.phone,
+      customerName: booking.customer?.full_name ?? '—',
+      serviceType:  booking.service_type,
+      scheduledAt:  booking.scheduled_at,
+    }, '[sms:approve]')
+    smsSent = sms.sent
+    smsError = sms.error
+
+    if (!smsSent) {
+      const { error: revertError } = await service
+        .from('bookings')
+        .update({ status: 'pending', updated_at: new Date().toISOString() })
+        .eq('id', bookingId)
+
+      if (revertError) {
+        console.error('[sms:approve] failed to revert booking to pending after SMS failure:', revertError.message)
+      } else {
+        finalStatus = 'pending'
+      }
+    }
   }
 
-  // Send email to the worker who submitted the booking (fire-and-forget)
+  // Email the worker who submitted it — only once the outcome is final, so a
+  // reverted approval never sends a misleading "approved" email.
   if (booking.creator?.email) {
     const emailData = {
       bookingId:    booking.id,
       customerName: booking.customer?.full_name ?? '—',
       carMake:      booking.car?.make ?? '—',
       carModel:     booking.car?.model ?? '—',
-      licensePlate: booking.car?.license_plate,
+      licensePlate: booking.car?.license_plate ?? undefined,
       serviceType:  booking.service_type,
       scheduledAt:  booking.scheduled_at,
       workerName:   booking.creator.full_name,
       workerEmail:  booking.creator.email,
     }
 
-    if (body.action === 'approved') {
+    if (action === 'rejected') {
+      void sendBookingRejected({ ...emailData, reason: isNonEmptyString(reason) ? reason.trim() : undefined })
+    } else if (finalStatus === 'confirmed') {
       void sendBookingApproved(emailData)
-    } else {
-      void sendBookingRejected({ ...emailData, reason: body.reason })
-    }
-  }
-
-  // Send confirmation SMS to the customer on approval
-  let smsSent = false
-  let smsError: string | null = null
-  if (body.action === 'approved' && !booking.customer?.phone) {
-    console.warn(`[sms:approve] booking=${body.bookingId} — customer has no phone, skipping SMS`)
-    smsError = 'Kunden saknar telefonnummer'
-  }
-  if (body.action === 'approved' && booking.customer?.phone) {
-    console.log(`[sms:approve] booking=${body.bookingId} — starting SMS flow`)
-    await (async () => {
-      // Fetch active template
-      // eslint-disable-next-line @typescript-eslint/no-explicit-any
-      const { data: template, error: templateErr } = await (service as any)
-        .from('sms_templates')
-        .select('body')
-        .eq('is_active', true)
-        .limit(1)
-        .maybeSingle()
-
-      if (templateErr) {
-        console.error('[sms:approve] Template fetch error:', templateErr.message)
-        smsError = templateErr.message
-        return
-      }
-      if (!template?.body) {
-        console.warn('[sms:approve] No active template configured — skipping SMS')
-        smsError = 'Ingen aktiv SMS-mall konfigurerad'
-        return
-      }
-      console.log('[sms:approve] Template found, inserting sms_log...')
-
-      // Insert pending log first — unique index prevents duplicate sends.
-      // On 23505: if the blocking row is a stale pending (>5 min, crashed send),
-      // mark it unknown (delivery uncertain) and skip resend — requires manual reconciliation.
-      const logId = await (async (): Promise<string | null> => {
-        const smsLogPayload = {
-          booking_id:   booking.id,
-          customer_id:  booking.customer_id,
-          phone_number: booking.customer.phone,
-          message_body: template.body,
-          sms_type:     'confirmation',
-          provider:     '46elks',
-          status:       'pending',
-        }
-
-        // eslint-disable-next-line @typescript-eslint/no-explicit-any
-        const { data, error } = await (service as any)
-          .from('sms_logs')
-          .insert(smsLogPayload)
-          .select('id')
-          .single()
-
-        if (!error) {
-          console.log(`[sms:approve] sms_log inserted id=${(data as { id: string }).id}`)
-          return (data as { id: string }).id
-        }
-
-        if (error.code !== '23505') {
-          console.error('[sms:approve] Failed to insert sms_log:', error.code, error.message)
-          return null
-        }
-        console.warn('[sms:approve] Duplicate sms_log (23505), checking for stale pending...')
-
-        // Unique violation — check for stale pending row
-        // eslint-disable-next-line @typescript-eslint/no-explicit-any
-        const { data: existing } = await (service as any)
-          .from('sms_logs')
-          .select('id, status, created_at')
-          .eq('booking_id', booking.id)
-          .eq('sms_type', 'confirmation')
-          .neq('status', 'failed')
-          .maybeSingle()
-
-        // A stale pending row means the process died between send and log-update —
-        // the SMS may or may not have been delivered. Mark it 'unknown' so it
-        // blocks further automatic sends and requires manual reconciliation.
-        const staleThresholdMs = 5 * 60 * 1000
-        const isStale = existing?.status === 'pending'
-          && existing.created_at
-          && (Date.now() - new Date(existing.created_at).getTime()) > staleThresholdMs
-
-        if (isStale) {
-          // eslint-disable-next-line @typescript-eslint/no-explicit-any
-          await (service as any)
-            .from('sms_logs')
-            .update({ status: 'unknown', error_message: 'stale pending — delivery unknown, manual check required' })
-            .eq('id', existing.id)
-          console.warn('[sms] Stale pending row found for booking', booking.id, '— marked unknown, skipping resend')
-        }
-
-        return null  // skip resend in all 23505 cases
-      })()
-
-      if (!logId) {
-        console.warn('[sms:approve] No logId — aborting SMS send')
-        smsError = 'SMS kunde inte skickas (dubblett eller loggfel)'
-        return
-      }
-      console.log(`[sms:approve] Calling 46elks for logId=${logId}...`)
-
-      const result = await sendBookingConfirmedSms(
-        {
-          phone:        booking.customer.phone,
-          customerName: booking.customer.full_name ?? '—',
-          serviceType:  booking.service_type,
-          scheduledAt:  booking.scheduled_at,
-        },
-        template.body,
-      )
-
-      // eslint-disable-next-line @typescript-eslint/no-explicit-any
-      const { error: logUpdateError } = await (service as any)
-        .from('sms_logs')
-        .update({
-          message_body:        result.message || template.body,
-          status:              result.sent ? 'sent' : 'failed',
-          provider_message_id: result.messageId ?? null,
-          sent_at:             result.sent ? new Date().toISOString() : null,
-          error_message:       result.error ?? null,
-        })
-        .eq('id', logId)
-
-      console.log(`[sms:approve] 46elks result: sent=${result.sent} messageId=${result.messageId} error=${result.error}`)
-
-      if (logUpdateError) {
-        console.error('[sms:approve] Failed to update sms_log after send:', logUpdateError.message)
-      }
-
-      if (result.sent) {
-        // eslint-disable-next-line @typescript-eslint/no-explicit-any
-        const { error: bookingFlagError } = await (service as any)
-          .from('bookings')
-          .update({ sms_confirmation_sent: true })
-          .eq('id', body.bookingId)
-
-        if (bookingFlagError) {
-          console.error('[sms] Failed to set sms_confirmation_sent:', bookingFlagError.message)
-        }
-        smsSent = true
-      } else {
-        smsError = result.error ?? 'SMS kunde inte skickas'
-      }
-    })()
-  }
-
-  // If the customer never actually got the confirmation SMS, don't leave the booking
-  // silently marked "confirmed" — revert it to pending so it stays visible in the
-  // pending-bookings banner and Goran can retry the approval (or delete it) instead of
-  // it looking done when it isn't.
-  let finalStatus = newStatus
-  if (body.action === 'approved' && !smsSent) {
-    // eslint-disable-next-line @typescript-eslint/no-explicit-any
-    const { error: revertError } = await (service as any)
-      .from('bookings')
-      .update({ status: 'pending', updated_at: new Date().toISOString() })
-      .eq('id', body.bookingId)
-
-    if (revertError) {
-      console.error('[sms:approve] Failed to revert booking to pending after SMS failure:', revertError.message)
-    } else {
-      finalStatus = 'pending'
     }
   }
 

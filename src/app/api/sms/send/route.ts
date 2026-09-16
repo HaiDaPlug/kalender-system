@@ -1,52 +1,46 @@
 import { NextRequest, NextResponse } from 'next/server'
-import { createRawClient } from '@/lib/supabase/server-raw'
+import { requireApiUser, REVIEWER_ROLES } from '@/lib/auth/session'
 import { createServiceClient } from '@/lib/supabase/service'
 import { sendRawSms } from '@/lib/sms/46elks'
+import { jsonError, readJsonObject, isNonEmptyString } from '@/lib/api'
 
+const MAX_MESSAGE_CHARS = 600
+
+// POST /api/sms/send { bookingId, message } — manual SMS to the booking's customer (admin/manager).
+// A manual message is logged as sms_type 'manual' and does NOT count as the
+// booking confirmation, so bookings.sms_confirmation_sent is left untouched.
 export async function POST(request: NextRequest) {
-  const sessionClient = await createRawClient()
-  const { data: { user } } = await sessionClient.auth.getUser()
-  if (!user) return NextResponse.json({ error: 'Unauthorized' }, { status: 401 })
+  const auth = await requireApiUser(REVIEWER_ROLES)
+  if (!auth.ok) return auth.response
 
-  const { data: actor } = await sessionClient
-    .from('profiles')
-    .select('role')
-    .eq('id', user.id)
-    .single()
+  const body = await readJsonObject(request)
+  if (!body) return jsonError('Ogiltig JSON', 400)
 
-  if (!['admin', 'manager'].includes((actor as { role: string } | null)?.role ?? '')) {
-    return NextResponse.json({ error: 'Forbidden' }, { status: 403 })
-  }
-
-  const { bookingId, message } = await request.json()
-  if (!bookingId || !message) {
-    return NextResponse.json({ error: 'bookingId and message are required' }, { status: 400 })
-  }
+  const { bookingId, message } = body
+  if (!isNonEmptyString(bookingId) || !isNonEmptyString(message)) return jsonError('bookingId och message krävs', 400)
+  if (message.trim().length > MAX_MESSAGE_CHARS) return jsonError(`Meddelandet får vara högst ${MAX_MESSAGE_CHARS} tecken`, 400)
 
   const service = createServiceClient()
 
-  const { data: booking } = await service
+  const { data: booking, error: bookingErr } = await service
     .from('bookings')
-    .select('*, customer:customers(*)')
+    .select('id, customer_id, customer:customers(phone)')
     .eq('id', bookingId)
-    .single()
+    .maybeSingle()
 
-  if (!booking) return NextResponse.json({ error: 'Booking not found' }, { status: 404 })
+  if (bookingErr) return jsonError(bookingErr.message, 500)
+  if (!booking)   return jsonError('Bokningen hittades inte', 404)
 
-  const customer = (booking as { customer?: { phone?: string } }).customer
-  const customerId = (booking as { customer_id?: string }).customer_id
+  const customer = booking.customer as { phone?: string | null } | null
+  if (!customer?.phone) return jsonError('Kunden saknar telefonnummer', 400)
 
-  if (!customer?.phone) {
-    return NextResponse.json({ error: 'Customer has no phone number' }, { status: 400 })
-  }
-
-  const result = await sendRawSms(customer.phone, message)
+  const result = await sendRawSms(customer.phone, message.trim())
 
   const { error: logErr } = await service.from('sms_logs').insert({
-    booking_id:          bookingId,
-    customer_id:         customerId,
-    phone_number:        customer.phone,
-    message_body:        message,
+    booking_id:          booking.id,
+    customer_id:         booking.customer_id,
+    phone_number:        result.normalisedTo ?? customer.phone,
+    message_body:        message.trim(),
     sms_type:            'manual',
     provider:            '46elks',
     status:              result.sent ? 'sent' : 'failed',
@@ -56,21 +50,11 @@ export async function POST(request: NextRequest) {
   })
 
   if (logErr) {
-    console.error('[sms:send] Failed to insert sms_log:', logErr.message)
-  }
-
-  if (result.sent) {
-    const { error: flagErr } = await service
-      .from('bookings')
-      .update({ sms_confirmation_sent: true })
-      .eq('id', bookingId)
-    if (flagErr) {
-      console.error('[sms:send] Failed to set sms_confirmation_sent:', flagErr.message)
-    }
+    console.error('[sms:send] failed to insert sms_log:', logErr.message)
   }
 
   if (!result.sent) {
-    return NextResponse.json({ error: result.error }, { status: 500 })
+    return jsonError(result.error ?? 'SMS kunde inte skickas', 502)
   }
 
   return NextResponse.json({ sent: true, messageId: result.messageId })

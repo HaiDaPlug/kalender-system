@@ -1,21 +1,23 @@
 'use client'
 
+import type { CSSProperties } from 'react'
+import { useRef, useEffect, useState, useMemo } from 'react'
 import type { Booking, Profile } from '@/types'
 import {
   STATUS_CONFIG,
   HOURS,
   HOUR_PX,
   TIME_COL_PX,
-  TIME_COL_PX_MOBILE,
+  CAL_GRID_VARS,
   MONTHS_SE,
   WEEK_DAYS_SE,
   isSameDay,
+  isWeekend,
   formatTime,
   getDaySegments,
   computeBookingLayouts,
 } from './calendar-utils'
 import { cn } from '@/lib/utils/cn'
-import { useRef, useEffect, useState } from 'react'
 import { CreateBookingModal } from './create-booking-modal'
 
 interface Props {
@@ -42,30 +44,31 @@ function useCurrentTime() {
   return time
 }
 
+function pad(n: number) {
+  return String(n).padStart(2, '0')
+}
+
 export function DayView({ current, bookings, workers = [], onSelectBooking, onBookingCreated }: Props) {
   const scrollRef = useRef<HTMLDivElement>(null)
   const today = new Date()
   const isToday = isSameDay(current, today)
-  const daySegments = getDaySegments(bookings, current)
-  const layouts = computeBookingLayouts(daySegments)
   const dowIndex = current.getDay() === 0 ? 6 : current.getDay() - 1
-  const { px: timePx } = useCurrentTime()
+  const { px: timePx, label: timeLabel } = useCurrentTime()
   const [newBookingTime, setNewBookingTime] = useState<Date | null>(null)
-  // Vilken 30-min slot musen hovrar över (i minuter från midnatt)
   const [hoverSlot, setHoverSlot] = useState<number | null>(null)
-  // Startpunkt för pekning, för att skilja tryck från svep på mobil.
-  const pointerStart = useRef<{ x: number; y: number } | null>(null)
-  // Smal skärm = telefon; styr tidsaxelns bredd.
-  const [isNarrow, setIsNarrow] = useState(false)
+
+  const layouts = useMemo(
+    () => computeBookingLayouts(getDaySegments(bookings, current)),
+    [bookings, current],
+  )
 
   function getSlotFromEvent(e: React.MouseEvent<HTMLDivElement>): number {
     const scrollEl = scrollRef.current
     if (!scrollEl) return 0
     const rect = scrollEl.getBoundingClientRect()
     const y = e.clientY - rect.top + scrollEl.scrollTop
-    // Snap to 15-min intervals
     const slotPx = HOUR_PX / 4
-    return Math.floor(y / slotPx) * 15
+    return Math.max(0, Math.min(24 * 60 - 15, Math.floor(y / slotPx) * 15))
   }
 
   useEffect(() => {
@@ -76,97 +79,71 @@ export function DayView({ current, bookings, workers = [], onSelectBooking, onBo
       scrollRef.current.scrollTop = Math.max(0, target)
     }
   // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [])
+  }, [current])
 
-  useEffect(() => {
-    const mq = window.matchMedia('(max-width: 767px)')
-    const apply = () => setIsNarrow(mq.matches)
-    apply()
-    mq.addEventListener('change', apply)
-    return () => mq.removeEventListener('change', apply)
-  }, [])
+  const totalMinutes = layouts.reduce((sum, l) => sum + l.booking.estimated_duration_minutes, 0)
 
   return (
     <div className="flex flex-col flex-1 min-h-0">
       {/* Day header */}
       <div className="border-b border-border px-6 py-2.5 shrink-0 flex items-center gap-3">
-        <span className="text-sm text-muted-foreground">{WEEK_DAYS_SE[dowIndex]}</span>
-        <span className={`text-2xl font-300 tabular ${isToday ? 'text-primary' : 'text-foreground'}`}>
+        <span className={cn('text-sm', isWeekend(current) ? 'text-muted-foreground' : 'text-foreground')}>{WEEK_DAYS_SE[dowIndex]}</span>
+        <span className={cn(
+          'h-9 min-w-9 px-1.5 flex items-center justify-center rounded-full text-xl tabular font-medium',
+          isToday ? 'bg-primary text-primary-foreground shadow-[0_2px_10px_-2px_rgba(245,200,66,0.6)]' : 'text-foreground'
+        )}>
           {current.getDate()}
         </span>
         <span className="text-sm text-muted-foreground">
           {MONTHS_SE[current.getMonth()]} {current.getFullYear()}
         </span>
-        <div className="ml-auto label-caps">
-          {daySegments.length} {daySegments.length === 1 ? 'bokning' : 'bokningar'}
+        <div className="ml-auto label-caps tabular">
+          {layouts.length} {layouts.length === 1 ? 'bokning' : 'bokningar'}
+          {totalMinutes > 0 && ` · ${Math.round(totalMinutes / 60 * 10) / 10} tim`}
         </div>
       </div>
 
       {/* Time grid */}
-      <div ref={scrollRef} className="flex-1 overflow-y-auto min-h-0" style={{ WebkitOverflowScrolling: 'touch' }}>
-        <div className="relative flex" style={{ height: `${HOURS.length * HOUR_PX}px` }}>
-          {/* Hour labels */}
-          {/* Tidsaxeln: TIME_COL_PX_MOBILE på mobil, Hais TIME_COL_PX på desktop */}
-          <div
-            className="shrink-0 relative"
-            style={{ width: isNarrow ? TIME_COL_PX_MOBILE : TIME_COL_PX }}
-          >
+      <div ref={scrollRef} className="flex-1 overflow-y-auto min-h-0 overscroll-contain">
+        <div className="cal-grid relative flex" style={{ height: `${HOURS.length * HOUR_PX}px`, ...CAL_GRID_VARS } as CSSProperties}>
+          {/* Hour labels + "now" label */}
+          <div className="shrink-0 relative" style={{ width: TIME_COL_PX }}>
             {HOURS.map(h => (
               <div key={h} className="flex items-start justify-end pr-2.5 pt-0.5" style={{ height: HOUR_PX }}>
-                <span className="label-caps tabular" style={{ fontSize: 'calc(0.65rem + 3px)' }}>{String(h).padStart(2, '0')}:00</span>
+                <span className="label-caps tabular" style={{ fontSize: 'calc(0.65rem + 3px)' }}>{pad(h)}:00</span>
               </div>
             ))}
+            {isToday && <span className="cal-now-label" style={{ top: `${timePx}px` }}>{timeLabel}</span>}
           </div>
 
           {/* Events column */}
           <div
-            className="flex-1 relative border-l border-border/60 cursor-pointer"
+            className="cal-column flex-1 border-l border-border/60 cursor-pointer"
+            data-today={isToday}
+            data-weekend={isWeekend(current)}
             onMouseMove={e => {
-              if ((e.target as HTMLElement).closest('[role="button"]')) { setHoverSlot(null); return }
-              setHoverSlot(getSlotFromEvent(e))
+              if ((e.target as HTMLElement).closest('.cal-block')) {
+                setHoverSlot(prev => (prev === null ? prev : null))
+                return
+              }
+              const slot = getSlotFromEvent(e)
+              setHoverSlot(prev => (prev === slot ? prev : slot))
             }}
             onMouseLeave={() => setHoverSlot(null)}
-            onPointerDown={e => { pointerStart.current = { x: e.clientX, y: e.clientY } }}
             onClick={e => {
-              if ((e.target as HTMLElement).closest('[role="button"]')) return
-              // Skilj tryck från svep — annars öppnas modalen vid scroll.
-              const start = pointerStart.current
-              pointerStart.current = null
-              if (start) {
-                const dx = Math.abs(e.clientX - start.x)
-                const dy = Math.abs(e.clientY - start.y)
-                if (dx > 10 || dy > 10) return
-              }
+              if ((e.target as HTMLElement).closest('.cal-block')) return
               const slot = getSlotFromEvent(e)
               const d = new Date(current)
               d.setHours(Math.floor(slot / 60), slot % 60, 0, 0)
               setNewBookingTime(d)
             }}
           >
-            {/* Hour lines */}
-            {HOURS.map(h => (
-              <div key={h} className="absolute left-0 right-0 border-t border-border/40" style={{ top: `${h * HOUR_PX}px` }} />
-            ))}
-            {HOURS.map(h => (
-              <div key={`h${h}`} className="absolute left-0 right-0 border-t border-border/15" style={{ top: `${h * HOUR_PX + HOUR_PX / 2}px` }} />
-            ))}
-
-            {/* Hover slot — 30-min block snapped to 15-min grid, like Google Calendar */}
             {hoverSlot !== null && (
               <div
-                className="absolute left-0 right-0 z-10 pointer-events-none hidden md:block"
-                style={{
-                  top: `${(hoverSlot / 60) * HOUR_PX}px`,
-                  height: `${HOUR_PX / 2}px`,
-                  transition: 'top 80ms ease',
-                }}
+                className="cal-hover-slot text-xs"
+                style={{ top: `${(hoverSlot / 60) * HOUR_PX}px`, height: `${HOUR_PX / 2}px` }}
               >
-                <div className="absolute inset-0 bg-primary/10 border-y border-primary/25" />
-                <div className="absolute inset-0 flex items-center justify-center">
-                  <span className="text-xs font-medium text-primary/70 tabular leading-none">
-                    {String(Math.floor(hoverSlot / 60)).padStart(2, '0')}:{String(hoverSlot % 60).padStart(2, '0')}
-                  </span>
-                </div>
+                {pad(Math.floor(hoverSlot / 60))}:{pad(hoverSlot % 60)}
               </div>
             )}
 
@@ -185,24 +162,24 @@ export function DayView({ current, bookings, workers = [], onSelectBooking, onBo
                   tabIndex={0}
                   onKeyDown={e => e.key === 'Enter' && onSelectBooking(b)}
                   className={cn(
-                    'absolute overflow-hidden cursor-pointer hover:brightness-110 transition-all z-10',
-                    continuesFromPrev ? 'rounded-b' : continuesToNext ? 'rounded-t' : 'rounded'
+                    'cal-block',
+                    continuesFromPrev ? 'rounded-b-md' : continuesToNext ? 'rounded-t-md' : 'rounded-md'
                   )}
                   style={{
                     top: `${top}px`,
                     height: `${height}px`,
                     left: colLeft,
                     width: colW,
-                    background: cfg.bg,
-                    borderLeft: `3px solid ${cfg.color}`,
+                    '--c': cfg.color,
                     borderTop: continuesFromPrev ? `2px dashed ${cfg.color}` : undefined,
                     borderBottom: continuesToNext ? `2px dashed ${cfg.color}` : undefined,
-                  }}
+                  } as CSSProperties}
                 >
                   <div className="px-3 py-1.5 h-full flex flex-col gap-1 overflow-hidden">
                     <div className="flex items-center justify-between gap-2">
-                      <p className="text-sm font-semibold leading-tight truncate" style={{ color: cfg.color }}>
-                        {continuesFromPrev ? '↳ ' : ''}{b.customer?.full_name ?? '—'}
+                      <p className="cal-block-title text-sm truncate">
+                        <span className="cal-block-time">{continuesFromPrev ? '↳' : formatTime(b.scheduled_at)}</span>
+                        {' '}{b.customer?.full_name ?? '—'}
                       </p>
                       <div className="flex items-center gap-1.5 shrink-0">
                         <div
@@ -211,7 +188,7 @@ export function DayView({ current, bookings, workers = [], onSelectBooking, onBo
                           style={{ background: b.sms_confirmation_sent ? 'var(--status-completed)' : 'var(--status-not-started)' }}
                         />
                         <span
-                          className="text-xs px-1.5 py-0.5 rounded font-medium"
+                          className="text-[11px] px-1.5 py-0.5 rounded-sm font-semibold"
                           style={{ color: cfg.color, background: cfg.chipBg }}
                         >
                           {cfg.label}
@@ -220,25 +197,21 @@ export function DayView({ current, bookings, workers = [], onSelectBooking, onBo
                     </div>
 
                     {height > 40 && (
-                      <p className="text-xs truncate" style={{ color: cfg.color, opacity: 0.75 }}>
+                      <p className="cal-block-meta text-xs truncate">
                         {b.car?.make} {b.car?.model}
-                        {b.car?.license_plate && (
-                          <span className="ml-1 font-medium tracking-widest uppercase">
-                            · {b.car.license_plate}
-                          </span>
-                        )}
+                        {b.car?.license_plate && <span className="plate ml-1.5">{b.car.license_plate}</span>}
                       </p>
                     )}
 
                     {height > 56 && (
-                      <p className="text-xs" style={{ color: cfg.color, opacity: 0.7 }}>
-                        {formatTime(b.scheduled_at)} · {b.estimated_duration_minutes} min
+                      <p className="cal-block-meta text-xs truncate">
+                        {b.service_type} · {b.estimated_duration_minutes} min
                         {b.assigned_worker && ` · ${b.assigned_worker.full_name}`}
                       </p>
                     )}
 
                     {height > 72 && b.customer_notes && (
-                      <p className="text-xs italic truncate" style={{ color: cfg.color, opacity: 0.55 }}>
+                      <p className="cal-block-meta text-xs italic truncate">
                         {b.customer_notes}
                       </p>
                     )}
@@ -247,15 +220,8 @@ export function DayView({ current, bookings, workers = [], onSelectBooking, onBo
               )
             })}
 
-            {/* Current time line — updates every minute */}
-            {isToday && (
-              <div className="absolute left-0 right-0 z-20 pointer-events-none" style={{ top: `${timePx}px` }}>
-                <div className="flex items-center gap-0">
-                  <div className="h-2 w-2 rounded-full bg-primary shrink-0 ml-[-4px]" />
-                  <div className="flex-1 h-px bg-primary" />
-                </div>
-              </div>
-            )}
+            {/* Current time line */}
+            {isToday && <div className="cal-now-line" style={{ top: `${timePx}px` }} />}
           </div>
         </div>
       </div>

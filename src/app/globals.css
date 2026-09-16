@@ -20,6 +20,7 @@
   --color-ring: var(--ring);
   --color-input: var(--input);
   --color-border: var(--border);
+  --color-border-strong: var(--border-strong);
   --color-destructive: var(--destructive);
   --color-accent-foreground: var(--accent-foreground);
   --color-accent: var(--accent);
@@ -29,6 +30,7 @@
   --color-secondary: var(--secondary);
   --color-primary-foreground: var(--primary-foreground);
   --color-primary: var(--primary);
+  --color-primary-hover: var(--primary-hover);
   --color-popover-foreground: var(--popover-foreground);
   --color-popover: var(--popover);
   --color-card-foreground: var(--card-foreground);
@@ -49,68 +51,81 @@
 }
 
 :root {
-  /* Near-neutral black — the faintest trace of warmth, restrained enough that gold is the
-     only color doing any real work. */
-  --background: #131211;
-  --foreground: #E8E4DC;
-  --card: #191817;
-  --card-foreground: #E8E4DC;
-  --popover: #191817;
-  --popover-foreground: #E8E4DC;
+  /* ── Surfaces ──────────────────────────────────────────────────────────
+     Warm near-black, stepped so elevation reads clearly:
+     background < card < popover. Borders are deliberately a notch brighter
+     than before so cards, inputs and rows have a real edge on this palette. */
+  --background: #121110;
+  --foreground: #EFEBE3;
+  --card: #1A1918;
+  --card-foreground: #EFEBE3;
+  --popover: #1F1E1C;
+  --popover-foreground: #EFEBE3;
 
-  /* Gold — the single accent, used everywhere (buttons, links, active states, focus rings) */
+  /* Gold — the single brand accent (buttons, links, active states, focus rings) */
   --primary: #F5C842;
-  --primary-foreground: #131211;
+  --primary-hover: #FFD75A;
+  --primary-foreground: #14120E;
 
-  --secondary: #201F1D;
-  --secondary-foreground: #E8E4DC;
-  --muted: #201F1D;
-  --muted-foreground: #9C9793;
-  --accent: #201F1D;
-  --accent-foreground: #E8E4DC;
-  --destructive: #E05252;
-  --border: #2C2A27;
-  --input: #201F1D;
+  --secondary: #232220;
+  --secondary-foreground: #EFEBE3;
+  --muted: #232220;
+  --muted-foreground: #A6A199;
+  --accent: #2A2825;
+  --accent-foreground: #EFEBE3;
+  --destructive: #F25C5C;
+  --border: #33302C;
+  --border-strong: #433F39;
+  --input: #1E1D1B;
   --ring: #F5C842;
-  --radius: 0.375rem;
+  --radius: 0.5rem;
 
-  --sidebar: #131211;
-  --sidebar-foreground: #E8E4DC;
+  --sidebar: #121110;
+  --sidebar-foreground: #EFEBE3;
   --sidebar-primary: #F5C842;
-  --sidebar-primary-foreground: #131211;
-  --sidebar-accent: #201F1D;
-  --sidebar-accent-foreground: #E8E4DC;
-  --sidebar-border: #2C2A27;
+  --sidebar-primary-foreground: #14120E;
+  --sidebar-accent: #232220;
+  --sidebar-accent-foreground: #EFEBE3;
+  --sidebar-border: #33302C;
   --sidebar-ring: #F5C842;
 
-  /* Status colors — the familiar amber/blue/purple/green/red family, softened (lower
-     saturation, tuned value) so each stays easy on the eyes at small sizes against black,
-     while still being instantly distinguishable at a glance. */
-  --status-not-started: #8F8A80;
-  --status-pending: #D9A648;
-  --status-confirmed: #6FA3D6;
-  --status-in-progress: #A886E0;
-  --status-completed: #6FBE87;
-  --status-cancelled: #DB6D6D;
+  /* ── Status colors ──────────────────────────────────────────────────────
+     The familiar amber/blue/purple/green/red family, now with more saturation
+     and lift so each state is unmistakable at a glance — while staying
+     comfortable on black. */
+  --status-not-started: #9A948B;
+  --status-pending: #F2B248;
+  --status-confirmed: #5EAAF5;
+  --status-in-progress: #B28EF7;
+  --status-completed: #4ED18C;
+  --status-cancelled: #F26B6B;
 
-  /* Role colors — reuse the status/accent palette so roles read as part of the same system */
+  /* Role colors reuse the same system */
   --role-admin: var(--primary);
   --role-manager: var(--status-confirmed);
   --role-worker: var(--status-not-started);
+
+  /* Elevation shadows tuned for a near-black UI (Tailwind's defaults vanish here) */
+  --shadow-card: inset 0 1px 0 rgba(255, 255, 255, 0.035), 0 1px 2px rgba(0, 0, 0, 0.35);
+  --shadow-pop: 0 12px 32px -8px rgba(0, 0, 0, 0.65), 0 2px 8px -2px rgba(0, 0, 0, 0.5), 0 0 0 1px rgba(255, 255, 255, 0.03) inset;
+  --shadow-modal: 0 30px 80px -20px rgba(0, 0, 0, 0.8), 0 8px 24px -8px rgba(0, 0, 0, 0.6);
 }
 
 @layer base {
   * {
     @apply border-border outline-ring/50;
-    /* Mjuk transition på alla interaktiva element globalt */
+  }
+
+  /* Transitions only on things that actually change on interaction. The old
+     `* { transition-property: … }` rule made every element a transition
+     target — including the hundreds of grid cells in the calendar — which is
+     measurably slower on hover and scroll. */
+  a, button, input, select, textarea, summary,
+  [role="button"], [role="menuitem"],
+  .btn, .field, .badge, .card, .nav-item, .menu-item, .avatar, .segmented > button {
     transition-property: color, background-color, border-color, opacity, box-shadow, transform;
     transition-duration: 150ms;
     transition-timing-function: cubic-bezier(0.4, 0, 0.2, 1);
-  }
-
-  /* Inaktivera transition på element som inte ska ha det */
-  *, *::before, *::after {
-    transition-property: color, background-color, border-color, opacity, box-shadow, transform;
   }
 
   body {
@@ -120,45 +135,45 @@
   html {
     @apply font-sans;
     font-size: 18px;
+    -webkit-font-smoothing: antialiased;
   }
 
-  /* På mobil är 18px för brett — text radbryts och knappar spränger raden.
-     Kalenderns HOUR_PX/TIME_COL_PX är i px, inte rem, så tidsrutnätets
-     geometri påverkas inte av detta.
-     OBS: sätt ALDRIG overflow-x: hidden på html/body här — det bryter
-     horisontell scroll i barnelement på iOS/Android och gjorde veckovyn
-     omöjlig att swipa. Ytor som behöver x-scroll sköter det själva. */
-  @media (max-width: 767px) {
-    html {
-      font-size: 15px;
-    }
+  ::selection {
+    background: color-mix(in srgb, var(--primary) 35%, transparent);
+    color: var(--foreground);
   }
 
-  /* Scrollbar */
+  /* Scrollbar — warm neutrals that match the palette */
   ::-webkit-scrollbar {
-    width: 4px;
-    height: 4px;
+    width: 6px;
+    height: 6px;
   }
   ::-webkit-scrollbar-track {
     background: transparent;
   }
   ::-webkit-scrollbar-thumb {
-    background: #2C2C33;
-    border-radius: 2px;
+    background: #3A3732;
+    border-radius: 3px;
   }
   ::-webkit-scrollbar-thumb:hover {
-    background: #3C3C45;
+    background: #4A463F;
   }
 
-  /* Mjukare focus-ring */
   :focus-visible {
     outline: 2px solid var(--primary);
     outline-offset: 2px;
     border-radius: 4px;
   }
+
+  @media (prefers-reduced-motion: reduce) {
+    *, *::before, *::after {
+      animation-duration: 0.01ms !important;
+      animation-iteration-count: 1 !important;
+      transition-duration: 0.01ms !important;
+    }
+  }
 }
 
-/* Tabular numbers everywhere */
 @layer utilities {
   .tabular {
     font-variant-numeric: tabular-nums;
@@ -171,11 +186,161 @@
     text-transform: uppercase;
     color: var(--muted-foreground);
   }
+  .plate {
+    font-family: var(--font-dm-mono), ui-monospace, monospace;
+    font-weight: 500;
+    letter-spacing: 0.14em;
+    text-transform: uppercase;
+  }
 }
 
-/* Sheen + grain overlay for a button — sits on top of a flat background-color
-   via ::after, blended with mix-blend-mode: overlay. Opt in per-button with
-   .btn-sheen rather than applying globally. */
+/* ══════════════════════════════════════════════════════════════════════════
+   Components — shared building blocks used across the app. Kept as plain
+   classes (not React components) so any element can opt in with one class.
+   ══════════════════════════════════════════════════════════════════════════ */
+
+/* ── Cards ───────────────────────────────────────────────────────────────── */
+.card {
+  background: var(--card);
+  border: 1px solid var(--border);
+  border-radius: var(--radius-lg);
+  box-shadow: var(--shadow-card);
+}
+.card-tinted {
+  --tint: var(--primary);
+  background: linear-gradient(180deg, color-mix(in srgb, var(--tint) 9%, var(--card)) 0%, var(--card) 100%);
+  border-color: color-mix(in srgb, var(--tint) 32%, var(--border));
+}
+
+/* ── Page header ─────────────────────────────────────────────────────────── */
+.page-title {
+  font-size: 1.375rem;
+  font-weight: 600;
+  letter-spacing: -0.02em;
+  line-height: 1.2;
+}
+.page-subtitle {
+  margin-top: 0.25rem;
+  font-size: 0.875rem;
+  color: var(--muted-foreground);
+}
+
+/* ── Buttons ─────────────────────────────────────────────────────────────── */
+.btn {
+  position: relative;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: 0.5rem;
+  height: 2.25rem;
+  padding: 0 0.875rem;
+  border-radius: var(--radius-md);
+  border: 1px solid transparent;
+  font-size: 0.875rem;
+  font-weight: 500;
+  line-height: 1;
+  white-space: nowrap;
+  user-select: none;
+  cursor: pointer;
+  text-decoration: none;
+  transition-property: color, background-color, border-color, box-shadow, transform, filter, opacity;
+}
+.btn > svg { flex-shrink: 0; width: 1rem; height: 1rem; }
+.btn:disabled,
+.btn[aria-disabled="true"] {
+  opacity: 0.5;
+  cursor: not-allowed;
+  pointer-events: none;
+}
+.btn:focus-visible {
+  outline: 2px solid var(--ring);
+  outline-offset: 2px;
+}
+.btn:active:not(:disabled) {
+  transform: translateY(1px);
+}
+
+.btn-sm { height: 2rem; padding: 0 0.75rem; font-size: 0.8125rem; gap: 0.375rem; }
+.btn-sm > svg { width: 0.875rem; height: 0.875rem; }
+.btn-xs { height: 1.75rem; padding: 0 0.625rem; font-size: 0.75rem; gap: 0.375rem; border-radius: var(--radius-sm); }
+.btn-xs > svg { width: 0.8125rem; height: 0.8125rem; }
+.btn-lg { height: 2.625rem; padding: 0 1.25rem; font-size: 0.9375rem; }
+.btn-icon { width: 2.25rem; padding: 0; }
+.btn-icon.btn-sm { width: 2rem; }
+.btn-icon.btn-xs { width: 1.75rem; }
+.btn-block { width: 100%; }
+
+/* Primary — the gold call to action. A vertical gold gradient with a crisp
+   inner highlight and a dark hairline so it sits *on* the surface instead of
+   being a flat swatch. */
+.btn-primary {
+  color: var(--primary-foreground);
+  font-weight: 600;
+  background: linear-gradient(180deg, #FFD95E 0%, var(--primary) 48%, #E8B62C 100%);
+  border-color: rgba(0, 0, 0, 0.45);
+  box-shadow:
+    inset 0 1px 0 rgba(255, 255, 255, 0.45),
+    inset 0 -1px 0 rgba(0, 0, 0, 0.12),
+    0 1px 2px rgba(0, 0, 0, 0.5);
+}
+.btn-primary:hover:not(:disabled) {
+  filter: brightness(1.06);
+  box-shadow:
+    inset 0 1px 0 rgba(255, 255, 255, 0.5),
+    inset 0 -1px 0 rgba(0, 0, 0, 0.12),
+    0 4px 14px -4px rgba(245, 200, 66, 0.55),
+    0 1px 2px rgba(0, 0, 0, 0.5);
+}
+.btn-primary:active:not(:disabled) {
+  filter: brightness(0.95);
+  box-shadow: inset 0 1px 2px rgba(0, 0, 0, 0.25);
+}
+
+/* Secondary — a raised neutral button for "the other action" */
+.btn-secondary {
+  color: var(--foreground);
+  background: linear-gradient(180deg, #2A2825 0%, var(--secondary) 100%);
+  border-color: var(--border-strong);
+  box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.05), 0 1px 2px rgba(0, 0, 0, 0.35);
+}
+.btn-secondary:hover:not(:disabled) {
+  background: var(--accent);
+  border-color: #4E4A43;
+}
+
+/* Ghost — quiet, for toolbars and icon buttons */
+.btn-ghost {
+  color: var(--muted-foreground);
+  background: transparent;
+}
+.btn-ghost:hover:not(:disabled) {
+  color: var(--foreground);
+  background: var(--secondary);
+}
+
+/* Tinted semantic buttons */
+.btn-danger {
+  --tone: var(--destructive);
+  color: var(--tone);
+  background: color-mix(in srgb, var(--tone) 12%, transparent);
+  border-color: color-mix(in srgb, var(--tone) 32%, transparent);
+}
+.btn-danger:hover:not(:disabled) {
+  background: color-mix(in srgb, var(--tone) 22%, transparent);
+  border-color: color-mix(in srgb, var(--tone) 50%, transparent);
+}
+.btn-success {
+  --tone: var(--status-completed);
+  color: var(--tone);
+  background: color-mix(in srgb, var(--tone) 14%, transparent);
+  border-color: color-mix(in srgb, var(--tone) 34%, transparent);
+}
+.btn-success:hover:not(:disabled) {
+  background: color-mix(in srgb, var(--tone) 24%, transparent);
+  border-color: color-mix(in srgb, var(--tone) 52%, transparent);
+}
+
+/* Legacy sheen overlay — kept for opt-in grain on the primary button */
 .btn-sheen {
   position: relative;
   isolation: isolate;
@@ -190,7 +355,7 @@
     url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='160' height='160' viewBox='0 0 160 160'%3E%3Cfilter id='n'%3E%3CfeTurbulence type='fractalNoise' baseFrequency='0.9' numOctaves='4' stitchTiles='stitch'/%3E%3CfeColorMatrix type='saturate' values='0'/%3E%3C/filter%3E%3Crect width='160' height='160' filter='url(%23n)'/%3E%3C/svg%3E");
   background-size: 100% 100%, 160px 160px;
   mix-blend-mode: overlay;
-  opacity: 0.22;
+  opacity: 0.18;
   pointer-events: none;
 }
 .btn-sheen > * {
@@ -198,7 +363,502 @@
   z-index: 1;
 }
 
-/* ── Animationer ────────────────────────────────────────────────────────── */
+/* ── Form fields ─────────────────────────────────────────────────────────── */
+.field {
+  display: block;
+  width: 100%;
+  height: 2.25rem;
+  padding: 0 0.75rem;
+  border-radius: var(--radius-md);
+  border: 1px solid var(--border-strong);
+  background: var(--input);
+  color: var(--foreground);
+  font-size: 0.875rem;
+  line-height: 1.4;
+  box-shadow: inset 0 1px 2px rgba(0, 0, 0, 0.3);
+  transition-property: border-color, box-shadow, background-color;
+}
+.field::placeholder {
+  color: color-mix(in srgb, var(--muted-foreground) 70%, transparent);
+}
+.field:hover:not(:disabled):not(:focus) {
+  border-color: #4E4A43;
+}
+.field:focus {
+  outline: none;
+  border-color: var(--primary);
+  box-shadow:
+    0 0 0 3px color-mix(in srgb, var(--primary) 22%, transparent),
+    inset 0 1px 2px rgba(0, 0, 0, 0.3);
+}
+.field:disabled {
+  opacity: 0.55;
+  cursor: not-allowed;
+}
+.field-sm { height: 2rem; font-size: 0.8125rem; padding: 0 0.625rem; }
+textarea.field {
+  height: auto;
+  min-height: 2.25rem;
+  padding: 0.5rem 0.75rem;
+  resize: none;
+  line-height: 1.5;
+}
+select.field {
+  appearance: none;
+  -webkit-appearance: none;
+  padding-right: 2.1rem;
+  cursor: pointer;
+  background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='14' height='14' viewBox='0 0 24 24' fill='none' stroke='%23A6A199' stroke-width='2.2' stroke-linecap='round' stroke-linejoin='round'%3E%3Cpath d='m6 9 6 6 6-6'/%3E%3C/svg%3E");
+  background-repeat: no-repeat;
+  background-position: right 0.65rem center;
+  background-size: 14px 14px;
+}
+select.field option {
+  background: var(--popover);
+  color: var(--foreground);
+}
+input[type="datetime-local"].field,
+input[type="date"].field,
+input[type="time"].field {
+  color-scheme: dark;
+}
+input[type="datetime-local"].field::-webkit-calendar-picker-indicator {
+  opacity: 0.7;
+  cursor: pointer;
+  filter: invert(0.85);
+}
+.field-icon {
+  position: relative;
+}
+.field-icon > svg {
+  position: absolute;
+  left: 0.7rem;
+  top: 50%;
+  transform: translateY(-50%);
+  width: 0.9rem;
+  height: 0.9rem;
+  color: var(--muted-foreground);
+  pointer-events: none;
+}
+.field-icon > .field {
+  padding-left: 2.1rem;
+}
+
+/* ── Badges ──────────────────────────────────────────────────────────────── */
+.badge {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.4rem;
+  height: 1.5rem;
+  padding: 0 0.55rem;
+  border-radius: 9999px;
+  border: 1px solid transparent;
+  font-size: 0.75rem;
+  font-weight: 600;
+  letter-spacing: 0.01em;
+  line-height: 1;
+  white-space: nowrap;
+}
+.badge-sm { height: 1.3rem; padding: 0 0.45rem; font-size: 0.7rem; gap: 0.3rem; }
+.badge-status {
+  --badge-color: var(--muted-foreground);
+  color: var(--badge-color);
+  background: color-mix(in srgb, var(--badge-color) 14%, transparent);
+  border-color: color-mix(in srgb, var(--badge-color) 32%, transparent);
+}
+.badge-status::before {
+  content: '';
+  width: 6px;
+  height: 6px;
+  border-radius: 9999px;
+  background: var(--badge-color);
+  box-shadow: 0 0 6px color-mix(in srgb, var(--badge-color) 70%, transparent);
+  flex-shrink: 0;
+}
+.badge-solid {
+  --badge-color: var(--primary);
+  color: var(--primary-foreground);
+  background: var(--badge-color);
+}
+.badge-outline {
+  color: var(--muted-foreground);
+  border-color: var(--border-strong);
+}
+
+/* ── Segmented control ───────────────────────────────────────────────────── */
+.segmented {
+  display: inline-flex;
+  gap: 2px;
+  padding: 3px;
+  background: var(--secondary);
+  border: 1px solid var(--border);
+  border-radius: var(--radius-md);
+}
+.segmented > button {
+  height: 1.75rem;
+  padding: 0 0.75rem;
+  border-radius: calc(var(--radius-md) - 2px);
+  font-size: 0.8125rem;
+  font-weight: 500;
+  color: var(--muted-foreground);
+  white-space: nowrap;
+  cursor: pointer;
+}
+.segmented > button:hover {
+  color: var(--foreground);
+}
+.segmented > button[data-active="true"] {
+  color: var(--foreground);
+  background: var(--card);
+  box-shadow: 0 1px 2px rgba(0, 0, 0, 0.45), inset 0 1px 0 rgba(255, 255, 255, 0.05);
+}
+
+/* ── Menus / popovers ────────────────────────────────────────────────────── */
+.menu {
+  background: var(--popover);
+  border: 1px solid var(--border-strong);
+  border-radius: var(--radius-md);
+  box-shadow: var(--shadow-pop);
+  overflow: hidden;
+}
+.menu-item {
+  display: flex;
+  align-items: center;
+  gap: 0.5rem;
+  width: 100%;
+  padding: 0.5rem 0.75rem;
+  font-size: 0.8125rem;
+  color: var(--muted-foreground);
+  text-align: left;
+  cursor: pointer;
+}
+.menu-item:hover {
+  color: var(--foreground);
+  background: var(--secondary);
+}
+
+/* ── Avatars ─────────────────────────────────────────────────────────────── */
+.avatar {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  flex-shrink: 0;
+  width: 2rem;
+  height: 2rem;
+  border-radius: 9999px;
+  font-size: 0.75rem;
+  font-weight: 700;
+  color: var(--primary);
+  background: linear-gradient(180deg, color-mix(in srgb, var(--primary) 24%, transparent), color-mix(in srgb, var(--primary) 12%, transparent));
+  border: 1px solid color-mix(in srgb, var(--primary) 35%, transparent);
+  text-transform: uppercase;
+}
+.avatar-sm { width: 1.5rem; height: 1.5rem; font-size: 0.65rem; }
+.avatar-lg { width: 2.5rem; height: 2.5rem; font-size: 0.9rem; }
+
+/* ── Brand mark ──────────────────────────────────────────────────────────── */
+.brand-mark {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  flex-shrink: 0;
+  width: 2rem;
+  height: 2rem;
+  border-radius: 0.5rem;
+  font-weight: 800;
+  font-size: 0.95rem;
+  letter-spacing: -0.02em;
+  color: var(--primary-foreground);
+  background: linear-gradient(180deg, #FFD95E 0%, var(--primary) 55%, #E8B62C 100%);
+  box-shadow:
+    inset 0 1px 0 rgba(255, 255, 255, 0.45),
+    0 2px 10px -2px rgba(245, 200, 66, 0.55);
+}
+.brand-mark-lg {
+  width: 3rem;
+  height: 3rem;
+  border-radius: 0.75rem;
+  font-size: 1.4rem;
+}
+
+/* ── Main content surface — faint gold wash top-left so the workspace has depth */
+.main-surface {
+  background:
+    radial-gradient(900px 420px at 12% -8%, color-mix(in srgb, var(--primary) 7%, transparent), transparent 60%),
+    color-mix(in srgb, var(--muted) 20%, var(--background));
+}
+
+/* ── Auth backdrop — login screen atmosphere */
+.auth-backdrop {
+  position: relative;
+  isolation: isolate;
+  overflow: hidden;
+}
+.auth-backdrop::before {
+  content: '';
+  position: absolute;
+  inset: 0;
+  z-index: -1;
+  background:
+    radial-gradient(720px 420px at 50% -10%, color-mix(in srgb, var(--primary) 16%, transparent), transparent 65%),
+    radial-gradient(600px 400px at 90% 110%, color-mix(in srgb, var(--primary) 6%, transparent), transparent 60%);
+}
+.auth-backdrop::after {
+  content: '';
+  position: absolute;
+  inset: 0;
+  z-index: -1;
+  opacity: 0.045;
+  background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='200' height='200' viewBox='0 0 200 200'%3E%3Cfilter id='n'%3E%3CfeTurbulence type='fractalNoise' baseFrequency='0.8' numOctaves='3' stitchTiles='stitch'/%3E%3CfeColorMatrix type='saturate' values='0'/%3E%3C/filter%3E%3Crect width='200' height='200' filter='url(%23n)'/%3E%3C/svg%3E");
+  background-size: 200px 200px;
+  pointer-events: none;
+}
+
+/* ── Sidebar nav items ───────────────────────────────────────────────────── */
+.nav-item {
+  display: flex;
+  align-items: center;
+  gap: 0.75rem;
+  height: 2.25rem;
+  padding: 0 0.75rem;
+  border-radius: var(--radius-md);
+  font-size: 0.875rem;
+  font-weight: 500;
+  color: var(--muted-foreground);
+  white-space: nowrap;
+}
+.nav-item > svg { width: 1rem; height: 1rem; flex-shrink: 0; }
+.nav-item:hover {
+  color: var(--foreground);
+  background: var(--secondary);
+}
+.nav-item[data-active="true"] {
+  color: var(--primary-foreground);
+  font-weight: 600;
+  background: linear-gradient(180deg, #FFD95E 0%, var(--primary) 55%, #EDBB30 100%);
+  box-shadow:
+    inset 0 1px 0 rgba(255, 255, 255, 0.35),
+    0 1px 2px rgba(0, 0, 0, 0.45),
+    0 4px 14px -6px rgba(245, 200, 66, 0.55);
+}
+.nav-item[data-collapsed="true"] {
+  justify-content: center;
+  padding: 0;
+}
+
+/* ── Calendar grid ───────────────────────────────────────────────────────── */
+/* Hour / half-hour lines and the off-hours shading are painted as CSS
+   gradients on each day column instead of 48 absolutely positioned <div>s per
+   column. --hour-px / --work-start / --work-end are set inline from the JS
+   constants in calendar-utils.ts so they can never drift. */
+.cal-grid {
+  --hour-px: 60px;
+  --work-start: 7;
+  --work-end: 19;
+  --cal-hour-line: color-mix(in srgb, var(--border) 75%, transparent);
+  --cal-half-line: color-mix(in srgb, var(--border) 30%, transparent);
+  --cal-offhours: rgba(0, 0, 0, 0.26);
+}
+.cal-column {
+  position: relative;
+  background-color: transparent;
+  background-image:
+    linear-gradient(
+      to bottom,
+      var(--cal-offhours) 0,
+      var(--cal-offhours) calc(var(--work-start) * var(--hour-px)),
+      transparent calc(var(--work-start) * var(--hour-px)),
+      transparent calc(var(--work-end) * var(--hour-px)),
+      var(--cal-offhours) calc(var(--work-end) * var(--hour-px)),
+      var(--cal-offhours) 100%
+    ),
+    repeating-linear-gradient(
+      to bottom,
+      var(--cal-hour-line) 0,
+      var(--cal-hour-line) 1px,
+      transparent 1px,
+      transparent var(--hour-px)
+    ),
+    repeating-linear-gradient(
+      to bottom,
+      transparent 0,
+      transparent calc(var(--hour-px) / 2),
+      var(--cal-half-line) calc(var(--hour-px) / 2),
+      var(--cal-half-line) calc(var(--hour-px) / 2 + 1px),
+      transparent calc(var(--hour-px) / 2 + 1px),
+      transparent var(--hour-px)
+    );
+}
+.cal-column[data-weekend="true"] {
+  background-color: rgba(255, 255, 255, 0.015);
+}
+.cal-column[data-today="true"] {
+  background-color: color-mix(in srgb, var(--primary) 6%, transparent);
+}
+
+/* A booking block. Opaque (mixed with the card color, not transparent) so
+   overlapping lanes and the off-hours shading never bleed through. */
+.cal-block {
+  --c: var(--status-pending);
+  position: absolute;
+  overflow: hidden;
+  cursor: pointer;
+  z-index: 10;
+  background: color-mix(in srgb, var(--c) 20%, var(--card));
+  border-left: 3px solid var(--c);
+  box-shadow: inset 0 0 0 1px color-mix(in srgb, var(--c) 40%, transparent);
+  transition: box-shadow 120ms ease;
+}
+.cal-block:hover {
+  z-index: 11;
+  box-shadow:
+    inset 0 0 0 1px color-mix(in srgb, var(--c) 75%, transparent),
+    0 8px 20px -8px rgba(0, 0, 0, 0.75);
+}
+.cal-block:focus-visible {
+  outline: 2px solid var(--primary);
+  outline-offset: 1px;
+}
+.cal-block-title {
+  color: var(--foreground);
+  font-weight: 600;
+  line-height: 1.2;
+}
+.cal-block-time {
+  color: var(--c);
+  font-variant-numeric: tabular-nums;
+}
+.cal-block-meta {
+  color: color-mix(in srgb, var(--foreground) 62%, transparent);
+}
+
+/* "Now" marker */
+.cal-now-line {
+  position: absolute;
+  left: 0;
+  right: 0;
+  z-index: 20;
+  pointer-events: none;
+  height: 0;
+}
+.cal-now-line::before {
+  content: '';
+  position: absolute;
+  left: -4px;
+  top: -4px;
+  width: 8px;
+  height: 8px;
+  border-radius: 9999px;
+  background: var(--primary);
+  box-shadow: 0 0 0 3px color-mix(in srgb, var(--primary) 25%, transparent);
+}
+.cal-now-line::after {
+  content: '';
+  position: absolute;
+  left: 0;
+  right: 0;
+  top: -0.5px;
+  height: 1px;
+  background: var(--primary);
+  box-shadow: 0 0 6px color-mix(in srgb, var(--primary) 60%, transparent);
+}
+.cal-now-label {
+  position: absolute;
+  right: 6px;
+  transform: translateY(-50%);
+  z-index: 21;
+  padding: 1px 5px;
+  border-radius: 4px;
+  background: var(--primary);
+  color: var(--primary-foreground);
+  font-size: 10px;
+  font-weight: 700;
+  letter-spacing: 0.02em;
+  font-variant-numeric: tabular-nums;
+  pointer-events: none;
+}
+
+/* Hover slot (the "click here to book" highlight) */
+.cal-hover-slot {
+  position: absolute;
+  left: 0;
+  right: 0;
+  z-index: 5;
+  pointer-events: none;
+  background: color-mix(in srgb, var(--primary) 12%, transparent);
+  border-top: 1px solid color-mix(in srgb, var(--primary) 35%, transparent);
+  border-bottom: 1px solid color-mix(in srgb, var(--primary) 35%, transparent);
+  transition: top 70ms ease;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  font-size: 0.65rem;
+  font-weight: 600;
+  color: color-mix(in srgb, var(--primary) 80%, transparent);
+  font-variant-numeric: tabular-nums;
+}
+
+/* Month view chips */
+.cal-chip {
+  --c: var(--status-pending);
+  display: flex;
+  align-items: center;
+  gap: 0.25rem;
+  padding: 1px 6px;
+  border-radius: 4px;
+  font-size: 0.7rem;
+  line-height: 1.5;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  cursor: pointer;
+  color: var(--foreground);
+  background: color-mix(in srgb, var(--c) 18%, var(--card));
+  border-left: 2px solid var(--c);
+  transition: background-color 120ms ease;
+}
+.cal-chip:hover {
+  background: color-mix(in srgb, var(--c) 30%, var(--card));
+}
+
+/* ── Skeleton (loading.tsx) ─────────────────────────────────────────────── */
+@keyframes shimmer {
+  from { background-position: 200% 0; }
+  to   { background-position: -200% 0; }
+}
+.skeleton {
+  border-radius: var(--radius-md);
+  background: linear-gradient(90deg, var(--secondary) 25%, var(--accent) 50%, var(--secondary) 75%);
+  background-size: 200% 100%;
+  animation: shimmer 1.4s ease-in-out infinite;
+}
+
+/* ── Empty states ────────────────────────────────────────────────────────── */
+.empty {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  gap: 0.5rem;
+  padding: 2.5rem 1rem;
+  text-align: center;
+  color: var(--muted-foreground);
+}
+.empty > svg {
+  width: 1.75rem;
+  height: 1.75rem;
+  opacity: 0.35;
+}
+.empty-title {
+  font-size: 0.875rem;
+  font-weight: 500;
+  color: var(--foreground);
+}
+.empty-text {
+  font-size: 0.8125rem;
+}
+
+/* ── Animations ──────────────────────────────────────────────────────────── */
 
 @keyframes fade-up {
   from { opacity: 0; transform: translateY(8px); }
@@ -232,28 +892,21 @@
 .animate-slide-left   { animation: slide-in-left  0.18s cubic-bezier(0.16, 1, 0.3, 1) both; }
 .animate-overlay      { animation: overlay-in     0.2s  ease both; }
 
-/* Sidinnehåll — tonas in vid navigation */
+/* Page content fades up on navigation */
 .page-enter {
-  animation: fade-up 0.2s cubic-bezier(0.16, 1, 0.3, 1) both;
+  animation: fade-up 0.16s cubic-bezier(0.16, 1, 0.3, 1) both;
 }
 
-/* Knappar — liten scale på klick */
-button:not(:disabled):active,
-a:active {
-  transform: scale(0.97);
-}
-
-/* ── Toasts ─────────────────────────────────────────────────────────────── */
+/* ── Toasts ──────────────────────────────────────────────────────────────── */
 /* Same card surface as the rest of the app — status color is carried only by
-   a left accent bar + icon, never by tinting the whole toast. Keeps the
-   message doing the talking instead of a wash of color. */
+   a left accent bar + icon, never by tinting the whole toast. */
 .toast-premium {
-  background: var(--card) !important;
+  background: var(--popover) !important;
   color: var(--foreground) !important;
-  border: 1px solid var(--border) !important;
-  border-left: 3px solid var(--border) !important;
+  border: 1px solid var(--border-strong) !important;
+  border-left: 3px solid var(--border-strong) !important;
   border-radius: var(--radius-md) !important;
-  box-shadow: 0 12px 32px -8px rgba(0, 0, 0, 0.55), 0 2px 8px -2px rgba(0, 0, 0, 0.4) !important;
+  box-shadow: var(--shadow-pop) !important;
   padding: 14px 16px !important;
 }
 .toast-premium-title {
@@ -273,7 +926,7 @@ a:active {
 }
 .toast-premium-close {
   background: var(--secondary) !important;
-  border: 1px solid var(--border) !important;
+  border: 1px solid var(--border-strong) !important;
   color: var(--muted-foreground) !important;
 }
 .toast-premium-close:hover {

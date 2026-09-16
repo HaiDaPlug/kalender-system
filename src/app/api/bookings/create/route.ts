@@ -1,24 +1,41 @@
 import { NextRequest, NextResponse } from 'next/server'
-import { createClient } from '@/lib/supabase/server'
+import { requireApiUser, isReviewer } from '@/lib/auth/session'
 import { createServiceClient } from '@/lib/supabase/service'
 import { sendBookingSubmitted } from '@/lib/email/resend'
-import { sendBookingConfirmedSms } from '@/lib/sms/46elks'
+import { normalisePhone } from '@/lib/sms/46elks'
+import { sendConfirmationSms } from '@/lib/sms/confirmation'
+import { jsonError, readJsonObject, isIsoDate, isNonEmptyString, isPositiveInt } from '@/lib/api'
 
 /*
   POST /api/bookings/create
-  Creates customer (reuse if phone exists) + car + booking in sequence, then sends SMS confirmation.
-  If the caller is a worker, status is forced to 'pending' and an approval email is sent to the admin.
+  Creates (or reuses) customer + car, then the booking, then sends the SMS confirmation.
+
+  - Workers: status is forced to 'pending' and the admin is notified by email.
+  - Admin/manager: status defaults to 'confirmed'. If the confirmation SMS cannot be
+    sent, the booking is reverted to 'pending' so it never looks confirmed when the
+    customer was never told.
+  - Customers are matched on phone number (normalised to E.164 first, so
+    "070-123 45 67" and "+46701234567" are the same customer).
+  - Cars are matched on registration number within the customer, so repeat visits
+    don't create duplicate car rows.
 */
+
+function normalisePlate(raw: string): string {
+  return raw.toUpperCase().replace(/[\s\-]/g, '')
+}
+
+function unique<T>(values: (T | null | undefined)[]): T[] {
+  return [...new Set(values.filter((v): v is T => v !== null && v !== undefined))]
+}
+
 export async function POST(request: NextRequest) {
-  const sessionClient = await createClient()
-  const { data: { user } } = await sessionClient.auth.getUser()
+  const auth = await requireApiUser()
+  if (!auth.ok) return auth.response
+  const { profile } = auth
 
-  const isDev = process.env.NODE_ENV === 'development'
-  if (!user && !isDev) {
-    return NextResponse.json({ error: 'Unauthorized' }, { status: 401 })
-  }
+  const body = await readJsonObject(request)
+  if (!body) return jsonError('Ogiltig JSON', 400)
 
-  const body = await request.json()
   const {
     customerName,
     customerPhone,
@@ -28,7 +45,7 @@ export async function POST(request: NextRequest) {
     carPlate,
     carColor,
     scheduledAt,
-    estimatedDurationMinutes,
+    estimatedDurationMinutes = 60,
     serviceType,
     assignedWorkerId,
     status,
@@ -36,214 +53,175 @@ export async function POST(request: NextRequest) {
     customerNotes,
   } = body
 
-  if (!customerName || !customerPhone || !carMake || !carModel || !scheduledAt) {
-    return NextResponse.json({ error: 'Obligatoriska fält saknas' }, { status: 400 })
+  if (!isNonEmptyString(customerName) || !isNonEmptyString(customerPhone) || !isNonEmptyString(carMake) || !isNonEmptyString(carModel)) {
+    return jsonError('Obligatoriska fält saknas (kund, telefon, bilmärke, modell)', 400)
+  }
+  if (!isIsoDate(scheduledAt))                     return jsonError('Ogiltig tidpunkt', 400)
+  if (!isNonEmptyString(serviceType))               return jsonError('Tjänst krävs', 400)
+  if (!isPositiveInt(estimatedDurationMinutes))     return jsonError('Längden måste vara ett positivt antal minuter', 400)
+  if (assignedWorkerId !== undefined && assignedWorkerId !== null && typeof assignedWorkerId !== 'string') {
+    return jsonError('Ogiltig ansvarig', 400)
+  }
+  if (totalPrice !== undefined && totalPrice !== null && !(typeof totalPrice === 'number' && Number.isFinite(totalPrice) && totalPrice >= 0)) {
+    return jsonError('Priset måste vara ett positivt tal', 400)
+  }
+  if (customerEmail !== undefined && customerEmail !== null && typeof customerEmail !== 'string') {
+    return jsonError('Ogiltig e-post', 400)
   }
 
-  // Resolve caller role — workers are forced to pending status
-  type CallerProfile = { id: string; full_name: string; email: string; role: string }
-  let callerProfile: CallerProfile | null = null
-  if (user) {
-    // eslint-disable-next-line @typescript-eslint/no-explicit-any
-    const { data } = await (sessionClient as any)
-      .from('profiles')
-      .select('id, full_name, email, role')
-      .eq('id', user.id)
-      .single() as { data: CallerProfile | null }
-    if (data) callerProfile = data
+  const caller = { id: profile.id, full_name: profile.full_name, email: profile.email }
+  const isWorker = !isReviewer(profile.role)
+
+  let finalStatus: 'pending' | 'confirmed' = 'confirmed'
+  if (isWorker) {
+    finalStatus = 'pending'
+  } else if (status === 'pending' || status === 'confirmed') {
+    finalStatus = status
+  } else if (status !== undefined && status !== null) {
+    return jsonError('Status måste vara pending eller confirmed', 400)
   }
 
   const supabase = createServiceClient()
 
-  const isWorker = !['admin', 'manager'].includes(callerProfile?.role ?? (isDev ? 'admin' : 'worker'))
-  const finalStatus: string = isWorker ? 'pending' : (status ?? 'confirmed')
+  // 1. Customer — reuse if the phone number is already known
+  const rawPhone = customerPhone.trim()
+  const e164 = normalisePhone(rawPhone)
+  const storedPhone = e164 ?? rawPhone
+  const phoneCandidates = unique([rawPhone, e164])
 
-  // 1. Kund — återanvänd om telefonnummer redan finns
   let customerId: string
-  const { data: existingCustomer } = await supabase
+  const { data: existingCustomers, error: lookupErr } = await supabase
     .from('customers')
     .select('id')
-    .eq('phone', customerPhone)
-    .maybeSingle()
+    .in('phone', phoneCandidates)
+    .order('created_at', { ascending: true })
+    .limit(1)
 
-  if (existingCustomer) {
-    customerId = existingCustomer.id
+  if (lookupErr) return jsonError(lookupErr.message, 500)
+
+  if (existingCustomers && existingCustomers.length > 0) {
+    customerId = existingCustomers[0].id
   } else {
     const { data: newCustomer, error: customerErr } = await supabase
       .from('customers')
       .insert({
-        full_name: customerName,
-        phone: customerPhone,
-        email: customerEmail ?? null,
+        full_name: customerName.trim(),
+        phone:     storedPhone,
+        email:     isNonEmptyString(customerEmail) ? customerEmail.trim() : null,
       })
       .select('id')
       .single()
 
     if (customerErr || !newCustomer) {
-      return NextResponse.json({ error: customerErr?.message ?? 'Kund kunde inte skapas' }, { status: 500 })
+      return jsonError(customerErr?.message ?? 'Kund kunde inte skapas', 500)
     }
     customerId = newCustomer.id
   }
 
-  // 2. Bil
-  const { data: car, error: carErr } = await supabase
-    .from('cars')
+  // 2. Car — reuse the customer's car with the same registration number
+  const plate = isNonEmptyString(carPlate) ? normalisePlate(carPlate) : null
+  let carId: string | null = null
+
+  if (plate) {
+    const { data: existingCars } = await supabase
+      .from('cars')
+      .select('id')
+      .eq('customer_id', customerId)
+      .in('license_plate', unique([plate, carPlate as string, (carPlate as string).toUpperCase()]))
+      .limit(1)
+    if (existingCars && existingCars.length > 0) carId = existingCars[0].id
+  }
+
+  if (!carId) {
+    const { data: car, error: carErr } = await supabase
+      .from('cars')
+      .insert({
+        customer_id:   customerId,
+        make:          carMake.trim(),
+        model:         carModel.trim(),
+        license_plate: plate,
+        color:         isNonEmptyString(carColor) ? carColor.trim() : null,
+      })
+      .select('id')
+      .single()
+
+    if (carErr || !car) {
+      return jsonError(carErr?.message ?? 'Bil kunde inte skapas', 500)
+    }
+    carId = car.id
+  }
+
+  // 3. Booking
+  const { data: booking, error: bookingErr } = await supabase
+    .from('bookings')
     .insert({
-      customer_id: customerId,
-      make: carMake,
-      model: carModel,
-      license_plate: carPlate ?? null,
-      color: carColor ?? null,
+      customer_id:                customerId,
+      car_id:                     carId,
+      assigned_worker_id:         isNonEmptyString(assignedWorkerId) ? assignedWorkerId : null,
+      status:                     finalStatus,
+      created_by:                 caller.id,
+      scheduled_at:               new Date(scheduledAt).toISOString(),
+      estimated_duration_minutes: estimatedDurationMinutes,
+      service_type:               serviceType.trim(),
+      customer_notes:             isNonEmptyString(customerNotes) ? customerNotes.trim() : null,
+      total_price:                typeof totalPrice === 'number' ? totalPrice : null,
+      sms_confirmation_sent:      false,
+      sms_ready_for_pickup_sent:  false,
     })
     .select('id')
     .single()
 
-  if (carErr || !car) {
-    return NextResponse.json({ error: carErr?.message ?? 'Bil kunde inte skapas' }, { status: 500 })
-  }
-
-  // 3. Bokning
-  // eslint-disable-next-line @typescript-eslint/no-explicit-any
-  const { data: booking, error: bookingErr } = await (supabase as any)
-    .from('bookings')
-    .insert({
-      customer_id: customerId,
-      car_id: car.id,
-      assigned_worker_id: assignedWorkerId ?? null,
-      status: finalStatus,
-      created_by: callerProfile?.id ?? null,
-      scheduled_at: scheduledAt,
-      estimated_duration_minutes: estimatedDurationMinutes,
-      service_type: serviceType,
-      customer_notes: customerNotes ?? null,
-      total_price: totalPrice ?? null,
-      sms_confirmation_sent: false,
-      sms_ready_for_pickup_sent: false,
-    })
-    .select('id')
-    .single() as { data: { id: string } | null; error: { message: string } | null }
-
   if (bookingErr || !booking) {
-    return NextResponse.json({ error: bookingErr?.message ?? 'Bokning kunde inte skapas' }, { status: 500 })
+    return jsonError(bookingErr?.message ?? 'Bokning kunde inte skapas', 500)
   }
 
-  // 4. If worker submitted, notify admin via email (fire-and-forget)
-  if (isWorker && callerProfile) {
+  // 4. Worker submission → notify admin (fire-and-forget, never throws)
+  if (isWorker) {
     void sendBookingSubmitted({
       bookingId:    booking.id,
-      customerName: customerName as string,
-      carMake:      carMake as string,
-      carModel:     carModel as string,
-      licensePlate: carPlate as string | undefined,
-      serviceType:  serviceType as string,
-      scheduledAt:  scheduledAt as string,
-      workerName:   callerProfile.full_name,
-      workerEmail:  callerProfile.email,
+      customerName: customerName.trim(),
+      carMake:      carMake.trim(),
+      carModel:     carModel.trim(),
+      licensePlate: plate ?? undefined,
+      serviceType:  serviceType.trim(),
+      scheduledAt:  scheduledAt,
+      workerName:   caller.full_name,
+      workerEmail:  caller.email,
     })
   }
 
-  // 5. SMS confirmation — only for admin/manager-created confirmed bookings
-  // Workers' pending bookings are not confirmed yet so no SMS is sent
+  // 5. SMS confirmation — only for reviewer-created confirmed bookings
   let smsSent = false
   let smsError: string | null = null
+  let resultStatus: 'pending' | 'confirmed' = finalStatus
+
   if (!isWorker && finalStatus === 'confirmed') {
-    console.log(`[sms:create] booking=${booking.id} — starting SMS flow`)
-    await (async () => {
-      // eslint-disable-next-line @typescript-eslint/no-explicit-any
-      const { data: template, error: templateErr } = await (supabase as any)
-        .from('sms_templates')
-        .select('body')
-        .eq('is_active', true)
-        .limit(1)
-        .maybeSingle()
+    const sms = await sendConfirmationSms(supabase, {
+      bookingId:    booking.id,
+      customerId,
+      phone:        storedPhone,
+      customerName: customerName.trim(),
+      serviceType:  serviceType.trim(),
+      scheduledAt,
+    }, '[sms:create]')
+    smsSent = sms.sent
+    smsError = sms.error
 
-      if (templateErr) {
-        console.error('[sms:create] Template fetch error:', templateErr.message)
-        smsError = templateErr.message
-        return
-      }
-      if (!template?.body) {
-        console.warn('[sms:create] No active template configured — skipping SMS')
-        smsError = 'Ingen aktiv SMS-mall konfigurerad'
-        return
-      }
-      console.log('[sms:create] Template found, inserting sms_log...')
+    // Don't leave the booking looking confirmed if the customer never got the SMS.
+    if (!smsSent) {
+      const { error: revertError } = await supabase
+        .from('bookings')
+        .update({ status: 'pending', updated_at: new Date().toISOString() })
+        .eq('id', booking.id)
 
-      // eslint-disable-next-line @typescript-eslint/no-explicit-any
-      const { data: logRow, error: logErr } = await (supabase as any)
-        .from('sms_logs')
-        .insert({
-          booking_id:   booking.id,
-          customer_id:  customerId,
-          phone_number: customerPhone as string,
-          message_body: template.body,
-          sms_type:     'confirmation',
-          provider:     '46elks',
-          status:       'pending',
-        })
-        .select('id')
-        .single()
-
-      if (logErr || !logRow) {
-        console.error('[sms:create] Failed to insert sms_log:', logErr?.message)
-        smsError = logErr?.message ?? 'Kunde inte logga SMS'
-        return
-      }
-      console.log(`[sms:create] sms_log inserted id=${(logRow as { id: string }).id}, calling 46elks...`)
-
-      const result = await sendBookingConfirmedSms(
-        {
-          phone:        customerPhone as string,
-          customerName: customerName as string,
-          serviceType:  serviceType as string,
-          scheduledAt:  scheduledAt as string,
-        },
-        template.body,
-      )
-      console.log(`[sms:create] 46elks result: sent=${result.sent} messageId=${result.messageId} error=${result.error}`)
-
-      // eslint-disable-next-line @typescript-eslint/no-explicit-any
-      await (supabase as any)
-        .from('sms_logs')
-        .update({
-          message_body:        result.message || template.body,
-          status:              result.sent ? 'sent' : 'failed',
-          provider_message_id: result.messageId ?? null,
-          sent_at:             result.sent ? new Date().toISOString() : null,
-          error_message:       result.error ?? null,
-        })
-        .eq('id', (logRow as { id: string }).id)
-
-      if (result.sent) {
-        // eslint-disable-next-line @typescript-eslint/no-explicit-any
-        await (supabase as any)
-          .from('bookings')
-          .update({ sms_confirmation_sent: true })
-          .eq('id', booking.id)
-        smsSent = true
+      if (revertError) {
+        console.error('[sms:create] failed to revert booking to pending after SMS failure:', revertError.message)
       } else {
-        smsError = result.error ?? 'SMS kunde inte skickas'
+        resultStatus = 'pending'
       }
-    })()
+    }
   } else {
     console.log(`[sms:create] booking=${booking.id} — SMS skipped (isWorker=${isWorker} status=${finalStatus})`)
-  }
-
-  // Don't leave the booking looking "confirmed" if the customer never actually got the
-  // SMS — revert to pending so it surfaces in the pending-bookings banner and can be
-  // retried (or deleted) instead of silently passing as done.
-  let resultStatus: string = finalStatus
-  if (!isWorker && finalStatus === 'confirmed' && !smsSent) {
-    const { error: revertError } = await supabase
-      .from('bookings')
-      .update({ status: 'pending', updated_at: new Date().toISOString() })
-      .eq('id', booking.id)
-
-    if (revertError) {
-      console.error('[sms:create] Failed to revert booking to pending after SMS failure:', revertError.message)
-    } else {
-      resultStatus = 'pending'
-    }
   }
 
   return NextResponse.json({ bookingId: booking.id, status: resultStatus, smsSent, smsError }, { status: 201 })
