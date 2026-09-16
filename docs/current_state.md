@@ -1,5 +1,5 @@
 # KOM-fort Bilvård — Portal: Current State
-_Last updated: 2026-09-16 (robustness pass: shared auth helper, API hardening, real dashboard data, design system)_
+_Last updated: 2026-09-16 — pushed to `origin/master` as `b79a689` (three commits: robustness + design system + perf + calendar + iPhone SMS preview; modal blur fix; mobile adaptation carried into the rewrite). Open items: run migration `010` on the live DB, test the phone layout on a real device._
 
 ---
 
@@ -96,13 +96,15 @@ src/
     dashboard/today-schedule.tsx       # ✅ Today's bookings list (time, customer, car, worker, status) → /bookings/[id]
     shifts/my-shifts-view.tsx          # ✅ Client half of /my-shifts (search, filter, list, linked bookings)
     calendar/
-      calendar-view.tsx                # Full-bleed toolbar (nav, title, view dropdown, status/worker filters, "Ny bokning" at far right) + status legend footer below the grid
-      day-view.tsx                     # 24h grid, 15-min snap slot clicks, live time line
-      week-view.tsx                    # 7-col grid, 15-min snap per column, compact day headers (day name above date circle, V{week} in the left spacer)
-      month-view.tsx                   # Month view, click → day view
-      booking-detail-panel.tsx         # Slide-in panel from right on booking click
-      calendar-utils.ts                # Layout math, time helpers, HOUR_PX / TIME_COL_PX constants
-      create-booking-modal.tsx         # ✅ Modal: customer, car, service, status, worker, price
+      calendar-view.tsx                # Top bar: ‹ › + title (+ week/date hint) left, "Ny bokning" pinned right. Bottom bar: view + "Ansvarig" dropdowns left, status legend chips (= status filter, with "Alla") right. Keyboard ← → T. Reads ?new=1
+      day-view.tsx                     # 24h grid (CSS-gradient lines + off-hours shading), 15-min snap, tap-vs-swipe, live "now" line + chip, 48px hour column on phones
+      week-view.tsx                    # 7 columns, memoized lane layouts, per-day counts in headers; on phones scrolls sideways (minmax 88px columns, synced headers, sticky hour column, auto-scroll to today, overlay arrows)
+      month-view.tsx                   # Bookings grouped by day once; chips with time + name on desktop, status dots on phones; click → day view
+      booking-detail-panel.tsx         # Slide-in panel (85% width on phones, 22rem on desktop) on booking click
+      calendar-utils.ts                # Layout math, time helpers, HOUR_PX / TIME_COL_PX / TIME_COL_PX_MOBILE / MIN_DAY_COL_PX / WORK_START_HOUR / WORK_END_HOUR / TAP_TOLERANCE_PX, CAL_GRID_VARS, STATUS_CONFIG (from lib/status.ts)
+      create-booking-modal.tsx         # ✅ Labelled 2-column form: customer, car, time, duration, service, worker, status, price, notes; footer says whether an SMS goes out
+    sms/sms-phone-preview.tsx          # ✅ iOS Messages (light mode) screen inside <Iphone>: real clock, one received bubble with the rendered template
+    ui/iphone.tsx                      # ✅ iPhone frame (adapted from Magic UI) that renders children inside the screen
     shifts/
       create-shift-modal.tsx           # ✅ Modal for worker to submit a shift (no workerId sent — server uses the session)
       pending-shifts-banner.tsx        # ✅ Amber banner on dashboard — approve/reject directly (pending-shifts-panel.tsx was unused and is removed)
@@ -110,15 +112,20 @@ src/
       jobs-board.tsx                   # ✅ Kanban board component (4 columns by status) — cards link to /bookings/[id]
       job-photos.tsx                   # ✅ Before/after photo upload component for workers
     layout/
-      sidebar.tsx                      # Side menu: Översikt, Kalender, Mina pass, Jobb, Granskning*, SMS-mallar**, Personal* (*admin/manager, **admin only). Collapsible (icon rail, persisted in localStorage). No wordmark/logo. Bottom-up: notifications bell → account section (avatar/name/role, click opens popup with known-accounts switcher + "Logga ut", wired to Supabase sign-out).
-      top-bar.tsx                      # Top bar with page title + date only — no avatar/notifications/logout (moved into sidebar account section)
-      providers.tsx
-    auth/login-form.tsx                 # Reads ?email= to prefill (used by account switcher); remembers account (email/name/role) to localStorage on successful login
+      sidebar.tsx                      # Brand mark + "KOM-fort / Bilvård"; nav Översikt, Kalender, Mina pass, Jobb, then "Administration": Granskning*, SMS-mallar**, Personal* (*admin/manager, **admin only). Desktop: collapsible icon rail (localStorage via useLocalFlag). Phones (<768px): slide-in drawer with hamburger in the top-left corner, backdrop, Escape, body scroll lock. Bottom: account section (avatar/name/role → popup with known-accounts switcher + "Logga ut").
+      top-bar.tsx                      # Page title (all routes mapped) + date; leaves pl-14 for the hamburger on phones
+      providers.tsx                    # TanStack Query client + Sonner <Toaster>
+    auth/login-form.tsx                 # Brand mark + card; reads ?email= to prefill (account switcher); remembers account to localStorage on success
+    booking/bookings-table.tsx          # Flat list used by /bookings — rows link to the booking
+    dashboard/dashboard-stats.tsx       # 4 clickable stat cards
+    dashboard/recent-bookings.tsx       # "Senast inlagda" with "inlagd av"
   lib/
-    utils/known-accounts.ts             # ✅ localStorage-backed list of previously logged-in accounts (max 6) — read/written by sidebar switcher + login-form
-    booking/bookings-table.tsx
-    dashboard/dashboard-stats.tsx
-    dashboard/recent-bookings.tsx
+    utils/known-accounts.ts             # ✅ localStorage-backed list of previously logged-in accounts (max 6), exposed via useSyncExternalStore helpers
+    hooks/use-local-flag.ts             # ✅ localStorage boolean (sidebar collapsed)
+    hooks/use-media-query.ts            # ✅ useIsNarrow() — true under 768px (useSyncExternalStore, no setState-in-effect)
+    hooks/use-live-minute.ts            # ✅ current minute, re-renders once a minute (phone preview clock)
+    sms/format.ts                       # ✅ formatSmsDate / formatSmsTime / interpolateTemplate — shared by the real send and the preview
+  app/(dashboard)/loading.tsx           # ✅ Shimmer skeleton streamed on every navigation
 supabase/
   schema.sql                           # Full schema — run once on a fresh DB
   migrations/
@@ -170,8 +177,8 @@ supabase/
 - Supabase Auth, three roles: `admin` (Administratör) / `manager` (Admin) / `worker` (Personal)
 - **Enabled as of 2026-07-15.** `proxy.ts` calls `updateSession(request)` on every request except `_next/static`, `_next/image`, `favicon.ico`, and static image extensions.
 - `updateSession` (`src/lib/supabase/middleware.ts`):
-  - Unauthenticated + page route (not `/`, `/login`, `/register`, `/api/webhooks/*`) → 307 redirect to `/login`
-  - Unauthenticated + `/api/*` route (excluding `/api/webhooks/*`) → `401 {"error":"unauthenticated"}` JSON, not a redirect (API callers shouldn't get an HTML page back)
+  - Unauthenticated + page route (not `/`, `/login`, `/register`) → 307 redirect to `/login` (verified with a network `auth.getUser()`, which is also where expired tokens are refreshed)
+  - `/api/*` (excluding webhooks): **no network auth in the proxy** — every route handler verifies the caller itself via `requireApiUser()`. The proxy only fast-fails requests with no `sb-*-auth-token` cookie at all → `401 {"error":"unauthenticated"}` JSON. (Halved the auth cost of every API call, 2026-09-16.)
   - `/api/webhooks/*` is always exempt — GHL calls this with no Supabase session at all; it authenticates via its own Ed25519 signature check instead (see GHL webhook section below)
   - Authenticated user hitting `/login` or `/register` → redirected to `/dashboard`, **except** `/login?email=...` (the sidebar account switcher's link) — that's let through so a signed-in user can actually reach the login form to sign in as a different account (see 2026-07-28 changelog)
 - **`src/lib/auth/session.ts` is the single entry point for "who is calling" on the server (2026-09-16).** `getSession()` returns `{ user, profile, supabase }` or a typed failure (`unauthenticated` 401 / `no_profile` 403 / `inactive` 403). `requireApiUser(roles?)` wraps it for route handlers and returns a ready JSON error response. Every API route and every server page uses it — there are no more per-route copies of the `auth.getUser()` + `profiles` lookup, and **all `NODE_ENV === 'development'` bypass branches are gone.**
@@ -187,26 +194,28 @@ supabase/
 
 Three views: **Day / Week / Month**
 
-- Hover over empty time → 30-min highlight block appears, snapped to **15-min grid**, time label centered in the block
-- Bookings that run past midnight (e.g. a 3-hour session starting 23:00) visually spill into the next day's column instead of being cut off at the day boundary — continuation segment shown with a dashed edge and a `↳` prefix
-- Click → opens "New booking" modal with time prefilled (15-min precision: :00 / :15 / :30 / :45)
-- Click on existing booking → detail panel slides in from right
-- "New booking" button in toolbar → same modal
-- Double bookings allowed — no blocking in API
-- Live time line updates every 60 seconds, auto-scrolls to current time on load
-- Status filter + worker filter in toolbar
-- After a booking is created, `router.refresh()` re-fetches server data without losing view/filter/scroll state (previously used `window.location.reload()`)
+- **Top bar:** `‹ ›` + title on the left (week view adds a muted `V38 · 14–20 sep` hint, day view the full date), **"Ny bokning" pinned top right** (icon-only under `sm`). Nothing else lives up there.
+- **Bottom bar:** view switcher (Dag/Vecka/Månad) and "Ansvarig" dropdowns on the left; the **status legend chips on the right are the status filter** — click one to show only that status, "Alla" resets. Counts are within the current worker filter so they add up.
+- **Keyboard:** `←` / `→` move a day/week/month, `T` jumps to today (ignored while typing or when a dialog is open).
+- Hover over empty time (desktop) → 30-min highlight snapped to the **15-min grid** with the time centered; click → "Ny bokning" modal with that time prefilled. On phones a tap that moved more than 10px is a scroll, not a booking.
+- Off-hours (before 07:00, after 19:00) are shaded; weekends faintly tinted; today's column has a gold wash. The "now" line has a glowing dot and a gold time chip in the hour column, updated every minute.
+- Booking blocks are opaque with a bright title, time in the status color, muted meta lines; overnight bookings spill into the next day with a dashed edge and `↳`.
+- Click on a booking → detail panel slides in from the right (85% width on phones).
+- Week headers show a per-day booking count; day header shows count + total hours.
+- **Phones (<768px):** the week scrolls sideways (Sat/Sun reachable), hour column and headers stay pinned, auto-scrolls to today, overlay arrows page through the week; month view shows status dots instead of text.
+- Double bookings allowed — no blocking in API. After a booking is created, `router.refresh()` re-fetches server data without losing view/filter/scroll state. `/calendar?new=1` opens the create modal directly (used by the dashboard shortcut).
 
 ---
 
 ## Calendar — technical notes
 
-- **`HOUR_PX = 60`** and **`TIME_COL_PX = 80`** in `calendar-utils.ts` — hour row height and hour-label column width. Hour labels are sized with an inline `style={{ height: HOUR_PX }}` (not a Tailwind `h-*` class) so they can never drift out of sync with the constant. All pixel calculations use these constants — never hardcode.
-- **Slot click fix:** `getSlotFromEvent` uses `scrollRef.current.getBoundingClientRect()` (the scroll container), not the inner column div — prevents double-counting scroll offset.
-- **15-min snap:** `Math.floor(y / (HOUR_PX / 4)) * 15` — one slot = `HOUR_PX / 4` pixels.
-- **Hover block:** always 30 min tall (`HOUR_PX / 2`), top transitions at 80ms for a gliding feel.
-- Auto-scrolls to current time on load (day + week views).
-- Time line in week view spans all 7 columns as a single absolute element.
+- **`HOUR_PX = 60`**, **`TIME_COL_PX = 80`** (desktop) / **`TIME_COL_PX_MOBILE = 48`**, **`MIN_DAY_COL_PX = 88`** (phone week columns), **`WORK_START_HOUR = 7` / `WORK_END_HOUR = 19`** (off-hours shading), **`TAP_TOLERANCE_PX = 10`** — all in `calendar-utils.ts`. Hour labels use inline `style={{ height: HOUR_PX }}`; all pixel math uses these constants — never hardcode.
+- **Grid lines are CSS, not DOM.** `.cal-column` (globals.css) paints hour/half-hour lines and the off-hours shading with `repeating-linear-gradient`s driven by `--hour-px` / `--work-start` / `--work-end`, which `CAL_GRID_VARS` sets inline from the constants above. The week view used to render ~340 line `<div>`s.
+- **Lane layouts are memoized** per day (`useMemo` on bookings + week); hover state bails out when the slot hasn't changed; blocks use a `box-shadow` hover (no `filter`). Month view groups bookings by day once (`groupBookingsByDay`).
+- **Slot click:** `getSlotFromEvent` uses `scrollRef.current.getBoundingClientRect()` (the scroll container) + `scrollTop`, snapped `Math.floor(y / (HOUR_PX / 4)) * 15`, clamped to the day.
+- **Phone week view:** `gridTemplateColumns` becomes `48px repeat(7, minmax(88px, 1fr))` (via `useIsNarrow()`), the scroll container is `overflow-auto`, the header row is a separate `overflow-x-hidden` element whose `scrollLeft` is synced on scroll, and the hour column / `V{week}` cell are `sticky left-0`. Overlay arrows appear only when the grid is actually wider than the viewport. Hover is disabled on phones.
+- **Tap vs. swipe:** `onPointerDown` records the start point; `onClick` ignores it if the pointer moved more than `TAP_TOLERANCE_PX`.
+- Auto-scrolls vertically to the current time (or 07:00) on load and horizontally to today's column on phones. The "now" line spans all columns as one absolute element; its chip lives inside the sticky hour column.
 - **Overnight spillover:** `getBookingSegmentForDay`/`getDaySegments` in `calendar-utils.ts` clip each booking to a given day's `[00:00, 24:00)` window and flag `continuesFromPrev`/`continuesToNext`. `computeBookingLayouts` operates on these segments (not raw bookings), so a booking is rendered once per day it touches — the tail end appears at the top of the next day's column instead of overflowing past the bottom of the day it started in. `getBookingsForDay` (plain same-day filter) is kept as-is for `month-view.tsx`, which doesn't need segment geometry.
 - Supabase key is `NEXT_PUBLIC_SUPABASE_PUBLISHABLE_KEY` (not `ANON_KEY`).
 
@@ -216,21 +225,21 @@ Three views: **Day / Week / Month**
 
 Two exported components — pure CSS transitions, no spring physics:
 
-- **`<Modal>`** — centered dialog. Backdrop fades in (180ms), card lifts 6px + fades (180ms ease). Exit reverses cleanly. `useDelayedUnmount` keeps the element in the DOM until the exit transition finishes before React unmounts it.
-- **`<SidePanel>`** — slides in from the right with `cubic-bezier(0.4,0,0.2,1)` (220ms), exits the same direction (200ms). Backdrop fades independently.
-- Both close on `Escape` key and backdrop click.
-- Used by: `CreateBookingModal`, `CreateShiftModal`, `BookingDetailPanel`.
-- All three accept an `open` boolean and stay mounted so exit animations play.
+- **`<Modal>`** — centered dialog **rendered through a portal on `<body>`** (z-100) so the blurred backdrop always covers the whole viewport. (The page-enter animation used to leave a `transform` on the content wrapper, which made it the containing block for `position: fixed` and clipped the backdrop to the main area — fixed 2026-09-16; the keyframe now ends on `transform: none`.) Backdrop fades in (180ms, blur 8px), card lifts 6px + fades. `useDelayedUnmount` keeps it in the DOM until the exit transition finishes. `p-2 sm:p-4`, `max-h-[92dvh]` on phones.
+- **`<SidePanel>`** — slides in from the right edge of its positioned parent (the calendar body) with `cubic-bezier(0.4,0,0.2,1)` (220ms). Intentionally *not* a portal. Default width `w-[85%] max-w-sm sm:w-80`.
+- **`<Lightbox>`** (`ui/lightbox.tsx`) is also a portal for the same reason.
+- All close on `Escape` and backdrop click; all accept an `open` boolean and stay mounted so exit animations play.
+- Used by: `CreateBookingModal`, `CreateShiftModal`, `BookingDetailPanel`, `JobPhotos` / job reviews (lightbox).
 
 ---
 
 ## Booking flow (create)
 
-1. Click time in calendar → modal opens with time prefilled (15-min precision)
-2. Fill in: customer (name + phone required), car (make + model required), service, duration, status, worker, price, notes
-3. `POST /api/bookings/create` — creates customer (reuses if phone number exists) + car + booking
-4. SMS confirmation sent via 46elks (requires active template in `sms_templates`; skipped for worker-submitted pending bookings)
-5. Calendar reloads
+1. Click time in calendar (or "Ny bokning" / `/calendar?new=1`) → modal opens with time prefilled (15-min precision)
+2. Fill in: customer (name + phone required), car (make + model required), time, duration, service, worker, status, price, notes
+3. `POST /api/bookings/create` — phone is normalised to E.164 and the customer is **reused if the number is known**; the car is **reused if the customer already has one with that plate**; then the booking is inserted. Workers are forced to `pending` and the admin is emailed.
+4. Admin/manager + `confirmed` → SMS confirmation via 46elks (`lib/sms/confirmation.ts`: active template → pending `sms_log` → send → log/flag). **If the SMS fails the booking is reverted to `pending`** and the toast says so.
+5. Calendar refreshes in place (`router.refresh()`)
 
 ---
 
